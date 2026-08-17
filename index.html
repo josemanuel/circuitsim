@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>CircuitLab Web — Simulador de Circuitos</title>
+<style>
+  :root{
+    --bg:#12161c; --panel:#1b212b; --panel2:#20283380; --border:#2c3644;
+    --accent:#4fd1c5; --accent2:#f6ad55; --text:#e6edf3; --dim:#8b98a9;
+    --grid:#232b36; --danger:#e5534b;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden;}
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);
+    border-bottom:1px solid var(--border);flex-wrap:wrap;}
+  header h1{font-size:15px;font-weight:600;margin:0 14px 0 0;color:var(--accent);white-space:nowrap;}
+  .btn{background:#2a3340;border:1px solid var(--border);color:var(--text);padding:6px 10px;
+    border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;}
+  .btn:hover{background:#333f4e;}
+  .btn.active{background:var(--accent);color:#0b1013;border-color:var(--accent);font-weight:600;}
+  .btn.primary{background:var(--accent);color:#0b1013;font-weight:600;border-color:var(--accent);}
+  .btn.danger{background:#3a1f1e;border-color:#5c2b28;color:#ffb4ae;}
+  .sep{width:1px;height:24px;background:var(--border);}
+  .slider-wrap{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);}
+  input[type=range]{accent-color:var(--accent);}
+
+  main{flex:1;display:flex;min-height:0;}
+  #palette{width:150px;background:var(--panel);border-right:1px solid var(--border);
+    overflow-y:auto;padding:8px;flex-shrink:0;}
+  #palette h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);
+    margin:10px 0 6px;padding-top:6px;border-top:1px solid var(--border);}
+  #palette h2:first-child{border-top:none;margin-top:0;}
+  .comp-btn{display:flex;align-items:center;gap:8px;width:100%;background:transparent;
+    border:1px solid transparent;color:var(--text);padding:6px 8px;border-radius:6px;
+    cursor:pointer;font-size:12.5px;text-align:left;margin-bottom:2px;}
+  .comp-btn:hover{background:#2a3340;}
+  .comp-btn.active{background:var(--accent);color:#0b1013;font-weight:600;}
+  .comp-btn svg{flex-shrink:0;}
+
+  #canvasWrap{flex:1;position:relative;overflow:auto;background:var(--bg);}
+  #gridCanvas{position:absolute;top:0;left:0;cursor:crosshair;}
+
+  #rightPanel{width:340px;background:var(--panel);border-left:1px solid var(--border);
+    display:flex;flex-direction:column;flex-shrink:0;}
+  #propsBox{padding:12px;border-bottom:1px solid var(--border);min-height:56px;}
+  #propsBox h3{font-size:12px;text-transform:uppercase;color:var(--dim);margin:0 0 8px;letter-spacing:.05em;}
+  #propsBody{font-size:13px;}
+  #propsBody label{display:block;font-size:12px;color:var(--dim);margin-bottom:3px;}
+  #propsBody input[type=text],#propsBody input[type=number]{
+    width:100%;background:#0f1319;border:1px solid var(--border);color:var(--text);
+    padding:5px 7px;border-radius:5px;font-size:13px;margin-bottom:8px;}
+  #propsBody .row{display:flex;gap:8px;}
+  #propsBody .empty{color:var(--dim);font-size:12.5px;}
+
+  #scopePanel{flex:1;display:flex;flex-direction:column;min-height:0;}
+  #scopeHead{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;
+    border-bottom:1px solid var(--border);}
+  #scopeHead h3{font-size:12px;text-transform:uppercase;color:var(--dim);margin:0;letter-spacing:.05em;}
+  #scopeCanvasWrap{flex:1;position:relative;min-height:160px;}
+  #scopeCanvas{width:100%;height:100%;display:block;background:#060809;}
+  #scopeControls{display:flex;gap:10px;padding:8px 12px;border-top:1px solid var(--border);
+    font-size:11px;color:var(--dim);flex-wrap:wrap;align-items:center;}
+  #probeList{padding:8px 12px;border-top:1px solid var(--border);font-size:12px;max-height:120px;overflow-y:auto;}
+  .probe-row{display:flex;align-items:center;gap:6px;padding:3px 0;}
+  .probe-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .probe-row span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .probe-row button{background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;}
+  .probe-row button:hover{color:var(--danger);}
+
+  footer{padding:5px 14px;background:var(--panel);border-top:1px solid var(--border);
+    font-size:11.5px;color:var(--dim);display:flex;justify-content:space-between;}
+  #hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>⚡ CircuitLab Web</h1>
+    <button class="btn primary" id="playBtn">⏸ Pausa</button>
+    <button class="btn" id="resetBtn">↺ Reiniciar</button>
+    <div class="sep"></div>
+    <div class="slider-wrap">Velocidad
+      <input type="range" id="speedSlider" min="1" max="200" value="60">
+      <span id="speedVal">1×</span>
+    </div>
+    <div class="sep"></div>
+    <label class="slider-wrap"><input type="checkbox" id="showCurrent" checked> Corriente animada</label>
+    <div class="sep"></div>
+    <button class="btn" id="clearBtn">🗑 Vaciar todo</button>
+    <div class="sep"></div>
+    <button class="btn" id="exportBtn">💾 Exportar</button>
+    <label class="btn" style="cursor:pointer;margin:0;">📂 Importar<input type="file" id="importFile" accept="application/json" style="display:none"></label>
+    <div style="flex:1"></div>
+    <span id="statusMsg" style="font-size:12px;color:var(--dim)"></span>
+  </header>
+
+  <main>
+    <div id="palette">
+      <h2>Herramienta</h2>
+      <button class="comp-btn" data-tool="select">🖱 Seleccionar</button>
+      <button class="comp-btn" data-tool="wire">╱ Cable</button>
+      <button class="comp-btn" data-tool="ground">⏚ Tierra</button>
+      <h2>Pasivos</h2>
+      <button class="comp-btn" data-tool="resistor">▭ Resistencia</button>
+      <button class="comp-btn" data-tool="capacitor">| | Condensador</button>
+      <button class="comp-btn" data-tool="inductor">🌀 Bobina</button>
+      <button class="comp-btn" data-tool="potentiometer">⏦ Potenciómetro</button>
+      <h2>Fuentes</h2>
+      <button class="comp-btn" data-tool="dcsource">🔋 Batería (DC)</button>
+      <button class="comp-btn" data-tool="acsource">∿ Fuente AC</button>
+      <button class="comp-btn" data-tool="currentsource">⇉ Fuente corriente</button>
+      <h2>Semiconductores</h2>
+      <button class="comp-btn" data-tool="diode">▷| Diodo</button>
+      <button class="comp-btn" data-tool="led">☀ LED</button>
+      <button class="comp-btn" data-tool="npn">🔺 Transistor NPN</button>
+      <button class="comp-btn" data-tool="pnp">🔻 Transistor PNP</button>
+      <button class="comp-btn" data-tool="nmos">⏫ MOSFET NMOS</button>
+      <button class="comp-btn" data-tool="pmos">⏬ MOSFET PMOS</button>
+      <h2>Activos</h2>
+      <button class="comp-btn" data-tool="opamp">▷ Amp. Operacional</button>
+      <h2>Otros</h2>
+      <button class="comp-btn" data-tool="switch">⏻ Interruptor</button>
+      <button class="comp-btn" data-tool="probe">📍 Sonda (Osc.)</button>
+    </div>
+
+    <div id="canvasWrap">
+      <canvas id="gridCanvas" width="2000" height="1400"></canvas>
+    </div>
+
+    <div id="rightPanel">
+      <div id="propsBox">
+        <h3>Propiedades</h3>
+        <div id="propsBody"><div class="empty">Selecciona un componente para editarlo.</div></div>
+      </div>
+      <div id="tabBar" style="display:flex;border-bottom:1px solid var(--border);">
+        <button class="tabBtn active" data-tab="scope" style="flex:1;background:none;border:none;color:var(--text);padding:8px;font-size:12px;cursor:pointer;border-bottom:2px solid var(--accent);">Osciloscopio</button>
+        <button class="tabBtn" data-tab="bode" style="flex:1;background:none;border:none;color:var(--dim);padding:8px;font-size:12px;cursor:pointer;border-bottom:2px solid transparent;">Bode</button>
+      </div>
+      <div id="scopePanel">
+        <div id="scopeHead">
+          <h3>Osciloscopio</h3>
+          <button class="btn" id="scopeClear" style="padding:3px 8px;font-size:11px;">Limpiar trazas</button>
+        </div>
+        <div id="scopeCanvasWrap"><canvas id="scopeCanvas"></canvas></div>
+        <div id="scopeControls">
+          <label>V/div <input type="range" id="voltsDiv" min="1" max="100" value="20"></label>
+          <label>t/div <input type="range" id="timeDiv" min="1" max="100" value="30"></label>
+        </div>
+        <div id="probeList"></div>
+      </div>
+      <div id="bodePanel" style="display:none;flex:1;flex-direction:column;min-height:0;">
+        <div id="scopeHead">
+          <h3>Respuesta en frecuencia</h3>
+        </div>
+        <div style="padding:10px 12px;font-size:12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border);">
+          <label style="color:var(--dim);">Fuente AC (estímulo, 1V)
+            <select id="bodeSource" style="width:100%;background:#0f1319;border:1px solid var(--border);color:var(--text);padding:5px;border-radius:5px;margin-top:3px;"></select>
+          </label>
+          <label style="color:var(--dim);">Sonda de salida
+            <select id="bodeOutput" style="width:100%;background:#0f1319;border:1px solid var(--border);color:var(--text);padding:5px;border-radius:5px;margin-top:3px;"></select>
+          </label>
+          <div class="row" style="display:flex;gap:8px;">
+            <label style="color:var(--dim);flex:1;">f min (Hz)<input type="number" id="bodeFmin" value="1" style="width:100%;background:#0f1319;border:1px solid var(--border);color:var(--text);padding:5px;border-radius:5px;margin-top:3px;"></label>
+            <label style="color:var(--dim);flex:1;">f max (Hz)<input type="number" id="bodeFmax" value="100000" style="width:100%;background:#0f1319;border:1px solid var(--border);color:var(--text);padding:5px;border-radius:5px;margin-top:3px;"></label>
+          </div>
+          <button class="btn primary" id="bodeRun" style="width:100%;">▶ Ejecutar barrido</button>
+          <span id="bodeInfo" style="color:var(--dim);font-size:11px;"></span>
+        </div>
+        <div id="bodeCanvasWrap" style="flex:1;position:relative;min-height:200px;">
+          <canvas id="bodeCanvas" style="width:100%;height:100%;display:block;background:#060809;"></canvas>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <span id="hint">Elige una herramienta y arrastra sobre el lienzo para colocar un componente.</span>
+    <span id="simTime">t = 0.000 s</span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   CircuitLab Web
+   Motor de simulación de circuitos (análisis nodal modificado / MNA) +
+   editor visual en canvas + osciloscopio en tiempo real.
+   Inspirado conceptualmente en simuladores tipo circuitjs (análisis nodal
+   modificado, modelo companion backward-Euler para C/L, Newton-Raphson
+   para el diodo). Todo el código es original.
+   ========================================================================= */
+
+const GRID = 20;
+const canvas = document.getElementById('gridCanvas');
+const ctx = canvas.getContext('2d');
+
+//////////////////////// ESTADO GLOBAL ////////////////////////////////////
+let elements = [];      // todos los elementos del circuito
+let selected = null;
+let currentTool = 'select';
+let dragStart = null;   // {x,y} en coordenadas de grid (snapped) durante colocación
+let dragEnd = null;
+let running = true;
+let simTime = 0;
+let elemCounter = 0;
+let scopeProbes = [];   // {id, elemId, color, label}
+const PROBE_COLORS = ['#4fd1c5','#f6ad55','#f56565','#68d391','#63b3ed','#d6bcfa','#faf089'];
+
+// muestras del osciloscopio: por sonda, array de {t, v}
+let scopeData = {};
+const SCOPE_BUFFER_SECONDS = 4;
+
+function uid(){ return 'e' + (++elemCounter); }
+
+//////////////////////// DEFINICIÓN DE COMPONENTES //////////////////////////
+// Cada elemento: {id,type,x1,y1,x2,y2,value,value2,rotationless...,state:{...}}
+// Coordenadas ya en píxeles snap-a-grid.
+
+function defaultValue(type){
+  switch(type){
+    case 'resistor': return 1000;          // ohm
+    case 'capacitor': return 100e-6;        // F
+    case 'inductor': return 10e-3;          // H
+    case 'potentiometer': return 1000;      // ohm total
+    case 'dcsource': return 5;              // V
+    case 'acsource': return 5;              // V amplitud
+    case 'currentsource': return 10e-3;     // A
+    case 'npn': case 'pnp': return 100;     // hFE (beta forward)
+    case 'opamp': return 100000;            // ganancia en lazo abierto (A)
+    case 'nmos': case 'pmos': return 2e-3;  // k (parámetro de transconductancia, A/V²)
+    default: return null;
+  }
+}
+function defaultFreq(type){ return type==='acsource' ? 60 : null; }
+function defaultVth(type){ return (type==='nmos'||type==='pmos') ? 2 : null; } // V, umbral
+
+function makeElement(type, x1,y1,x2,y2){
+  const el = {
+    id: uid(), type, x1,y1,x2,y2,
+    value: defaultValue(type),
+    freq: defaultFreq(type),
+    vth: defaultVth(type),
+    phase: 0,
+    wiper: 0.5, // para potenciómetro
+    closed: true, // para interruptor
+    // vd: diodo/LED · vbe/vbc: BJT · vgs/vds: MOSFET (guess de Newton, punto de operación)
+    state: { vprev:0, iprev:0, vd:0.1, vbe:0.6, vbc:-0.1, vgs:0, vds:0.1 },
+    vsrcIndex: -1,
+    selected:false
+  };
+  return el;
+}
+
+// Devuelve lista de "pines" (puntos de conexión) de un elemento con coords.
+function pins(el){
+  if(el.type==='ground' || el.type==='probe'){
+    return [{x:el.x1,y:el.y1}];
+  }
+  if(el.type==='potentiometer'){
+    // dos extremos + wiper (punto medio geométrico, offset perpendicular)
+    const mx=(el.x1+el.x2)/2, my=(el.y1+el.y2)/2;
+    const dx=el.x2-el.x1, dy=el.y2-el.y1;
+    const len=Math.hypot(dx,dy)||1;
+    const px=-dy/len, py=dx/len;
+    return [{x:el.x1,y:el.y1},{x:el.x2,y:el.y2},{x:mx+px*24,y:my+py*24}];
+  }
+  if(el.type==='npn' || el.type==='pnp'){
+    // orden: [base, colector, emisor]. Base = punto de arranque del arrastre;
+    // colector/emisor se derivan rotando una geometría fija según el ángulo de arrastre.
+    let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<40) L=40;
+    const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
+    return [{x:el.x1,y:el.y1}, rot(L,-L*0.4), rot(L,L*0.4)];
+  }
+  if(el.type==='nmos' || el.type==='pmos'){
+    // orden: [puerta, drenador, fuente]
+    let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<40) L=40;
+    const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
+    return [{x:el.x1,y:el.y1}, rot(L,-L*0.4), rot(L,L*0.4)];
+  }
+  if(el.type==='opamp'){
+    // orden: [entrada +, entrada -, salida]
+    let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<50) L=50;
+    const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
+    return [rot(0,-L*0.3), rot(0,L*0.3), rot(L,0)];
+  }
+  return [{x:el.x1,y:el.y1},{x:el.x2,y:el.y2}];
+}
+
+//////////////////////// UNION-FIND PARA NODOS //////////////////////////////
+class DSU{
+  constructor(){ this.parent={}; }
+  find(k){
+    if(!(k in this.parent)) this.parent[k]=k;
+    if(this.parent[k]!==k) this.parent[k]=this.find(this.parent[k]);
+    return this.parent[k];
+  }
+  union(a,b){ const ra=this.find(a), rb=this.find(b); if(ra!==rb) this.parent[ra]=rb; }
+}
+function keyOf(pt){ return Math.round(pt.x)+','+Math.round(pt.y); }
+
+//////////////////////// CONSTRUCCIÓN DEL CIRCUITO (topología) //////////////
+// Devuelve: {nodeIndexOf(elId,pinIdx) -> int, nodeCount, vsrcElems:[...], allNodeKeys}
+function buildTopology(){
+  const dsu = new DSU();
+  const groundKey = '__GND__';
+  dsu.find(groundKey);
+
+  // registrar todos los puntos
+  for(const el of elements){
+    const ps = pins(el);
+    ps.forEach(p=>dsu.find(keyOf(p)));
+    if(el.type==='ground'){
+      dsu.union(keyOf(ps[0]), groundKey);
+    }
+    if(el.type==='wire'){
+      dsu.union(keyOf(ps[0]), keyOf(ps[1]));
+    }
+  }
+  const groundRoot = dsu.find(groundKey);
+  // asignar índices de nodo (1..N), 0 = tierra
+  const rootToNode = {};
+  rootToNode[groundRoot] = 0;
+  let nextNode = 1;
+  function nodeOf(pt){
+    const r = dsu.find(keyOf(pt));
+    if(!(r in rootToNode)){ rootToNode[r]=nextNode++; }
+    return rootToNode[r];
+  }
+  // pre-computa nodos por elemento
+  const elNodes = {}; // id -> [n1,n2,(n3)]
+  for(const el of elements){
+    if(el.type==='wire' || el.type==='ground') continue;
+    const ps = pins(el);
+    elNodes[el.id] = ps.map(nodeOf);
+  }
+  const nodeCount = nextNode-1;
+  // fuentes de tensión y op-amps necesitan una incógnita extra (corriente de rama)
+  const vsrcElems = elements.filter(e=>e.type==='dcsource'||e.type==='acsource'||e.type==='opamp');
+  vsrcElems.forEach((e,i)=> e.vsrcIndex = i);
+  return {nodeOf, elNodes, nodeCount, vsrcElems, dsu};
+}
+
+//////////////////////// ÁLGEBRA LINEAL (Gauss con pivoteo) /////////////////
+function solveLinear(A, b){
+  const n = b.length;
+  for(let i=0;i<n;i++){
+    let piv=i;
+    for(let r=i+1;r<n;r++) if(Math.abs(A[r][i])>Math.abs(A[piv][i])) piv=r;
+    if(Math.abs(A[piv][i])<1e-14) continue; // singular en esa fila -> deja 0
+    [A[i],A[piv]]=[A[piv],A[i]]; [b[i],b[piv]]=[b[piv],b[i]];
+    const d=A[i][i];
+    for(let c=i;c<n;c++) A[i][c]/=d;
+    b[i]/=d;
+    for(let r=0;r<n;r++){
+      if(r===i) continue;
+      const f=A[r][i];
+      if(f===0) continue;
+      for(let c=i;c<n;c++) A[r][c]-=f*A[i][c];
+      b[r]-=f*b[i];
+    }
+  }
+  return b;
+}
+
+//////////////////////// ANÁLISIS DE FRECUENCIA (BODE) ///////////////////////
+// Análisis fasorial de pequeña señal: se linealiza el circuito alrededor del
+// punto de operación actual (diodos/LED usan su conductancia de pequeña señal
+// del último estado transitorio) y se resuelve la MNA con números complejos
+// para cada frecuencia, usando la fuente AC elegida como estímulo de 1V/0°.
+class Cx{
+  constructor(re,im=0){ this.re=re; this.im=im; }
+  add(o){ return new Cx(this.re+o.re, this.im+o.im); }
+  sub(o){ return new Cx(this.re-o.re, this.im-o.im); }
+  mul(o){ return new Cx(this.re*o.re-this.im*o.im, this.re*o.im+this.im*o.re); }
+  div(o){ const d=o.re*o.re+o.im*o.im||1e-300; return new Cx((this.re*o.re+this.im*o.im)/d, (this.im*o.re-this.re*o.im)/d); }
+  abs(){ return Math.hypot(this.re,this.im); }
+}
+const CZERO = new Cx(0,0);
+
+function solveComplexLinear(A,b){
+  const n=b.length;
+  for(let i=0;i<n;i++){
+    let piv=i, best=A[i][i].abs();
+    for(let r=i+1;r<n;r++){ const m=A[r][i].abs(); if(m>best){best=m; piv=r;} }
+    if(best<1e-14) continue;
+    [A[i],A[piv]]=[A[piv],A[i]]; [b[i],b[piv]]=[b[piv],b[i]];
+    const d=A[i][i];
+    for(let c=i;c<n;c++) A[i][c]=A[i][c].div(d);
+    b[i]=b[i].div(d);
+    for(let r=0;r<n;r++){
+      if(r===i) continue;
+      const f=A[r][i];
+      if(f.re===0 && f.im===0) continue;
+      for(let c=i;c<n;c++) A[r][c]=A[r][c].sub(f.mul(A[i][c]));
+      b[r]=b[r].sub(f.mul(b[i]));
+    }
+  }
+  return b;
+}
+
+function buildComplexMNA(topo, stimulusEl, w){
+  const { elNodes, nodeCount, vsrcElems } = topo;
+  const matSize = nodeCount + vsrcElems.length;
+  const A = Array.from({length:matSize},()=>new Array(matSize).fill(CZERO));
+  const rhs = new Array(matSize).fill(CZERO);
+  function stampG(n1,n2,g){ // g: Cx
+    if(n1) A[n1-1][n1-1]=A[n1-1][n1-1].add(g);
+    if(n2) A[n2-1][n2-1]=A[n2-1][n2-1].add(g);
+    if(n1&&n2){ A[n1-1][n2-1]=A[n1-1][n2-1].sub(g); A[n2-1][n1-1]=A[n2-1][n1-1].sub(g); }
+  }
+  function stampV(n1,n2,v,idx){
+    const row = nodeCount+idx;
+    if(n1){ A[n1-1][row]=A[n1-1][row].add(new Cx(1,0)); A[row][n1-1]=A[row][n1-1].add(new Cx(1,0)); }
+    if(n2){ A[n2-1][row]=A[n2-1][row].sub(new Cx(1,0)); A[row][n2-1]=A[row][n2-1].sub(new Cx(1,0)); }
+    rhs[row]=rhs[row].add(v);
+  }
+  function stampVCCS(nf,nt,cp,cn,gm){ // gm: Cx — sin señal, pequeña señal alrededor del punto de operación
+    if(nf){ if(cp) A[nf-1][cp-1]=A[nf-1][cp-1].add(gm); if(cn) A[nf-1][cn-1]=A[nf-1][cn-1].sub(gm); }
+    if(nt){ if(cp) A[nt-1][cp-1]=A[nt-1][cp-1].sub(gm); if(cn) A[nt-1][cn-1]=A[nt-1][cn-1].add(gm); }
+  }
+  function stampVCVSout(nout,vp,vn,idx,gain){ // gain: Cx
+    const row = nodeCount+idx;
+    if(nout){ A[nout-1][row]=A[nout-1][row].add(new Cx(1,0)); A[row][nout-1]=A[row][nout-1].add(new Cx(1,0)); }
+    if(vp) A[row][vp-1]=A[row][vp-1].sub(gain);
+    if(vn) A[row][vn-1]=A[row][vn-1].add(gain);
+  }
+  for(const el of elements){
+    if(el.type==='wire'||el.type==='ground'||el.type==='probe') continue;
+    const ns = elNodes[el.id];
+    switch(el.type){
+      case 'resistor': stampG(ns[0],ns[1], new Cx(1/Math.max(el.value,1e-6),0)); break;
+      case 'potentiometer': {
+        const total=Math.max(el.value,1), wp=Math.min(Math.max(el.wiper,0.001),0.999);
+        stampG(ns[0],ns[2], new Cx(1/Math.max(total*wp,1e-3),0));
+        stampG(ns[2],ns[1], new Cx(1/Math.max(total*(1-wp),1e-3),0));
+        break;
+      }
+      case 'capacitor': stampG(ns[0],ns[1], new Cx(0, w*Math.max(el.value,1e-15))); break;
+      case 'inductor': stampG(ns[0],ns[1], new Cx(0, -1/(w*Math.max(el.value,1e-9)||1e-12))); break;
+      case 'switch': stampG(ns[0],ns[1], new Cx(el.closed?100:1e-9,0)); break;
+      case 'diode': case 'led': {
+        const Is = el.type==='led'?1e-15:1e-12;
+        const Vt = el.type==='led'?0.052:0.026;
+        const vd = Math.max(Math.min(el.state.vd,1.5),-5);
+        const g = Math.max(Is/Vt*Math.exp(Math.min(vd/Vt,40)), 1e-12);
+        stampG(ns[0],ns[1], new Cx(g,0));
+        break;
+      }
+      case 'dcsource': stampV(ns[0],ns[1], CZERO, el.vsrcIndex); break;
+      case 'acsource': stampV(ns[0],ns[1], el===stimulusEl? new Cx(1,0) : CZERO, el.vsrcIndex); break;
+      case 'currentsource': break; // fuentes de corriente independientes -> 0 en el barrido AC
+      case 'npn': case 'pnp': {
+        // pequeña señal alrededor del punto de operación guardado en
+        // el.state.vbe/vbc durante el último paso transitorio (modelo
+        // coherente con el usado en el análisis transitorio: diodos de base
+        // escalados por beta + transconductancia de transporte gm=IS/Vt*exp(Vbe/Vt)).
+        const [nb,ncN,ne] = ns;
+        const IS=1e-14, Vt=0.026, betaF=Math.max(el.value,1), betaR=1;
+        const ISE=IS/betaF, ISC=IS/betaR;
+        const vbe = el.state.vbe||0, vbc = el.state.vbc||0;
+        const exBE=Math.exp(Math.min(vbe/Vt,40)), exBC=Math.exp(Math.min(vbc/Vt,40));
+        const GbeD = Math.max(ISE/Vt*exBE, 1e-16);
+        const GbcD = Math.max(ISC/Vt*exBC, 1e-16);
+        const GmF = IS/Vt*exBE, GmR = IS/Vt*exBC;
+        const npn = el.type==='npn';
+        const j1a = npn?nb:ne, j1c = npn?ne:nb;
+        const j2a = npn?nb:ncN, j2c = npn?ncN:nb;
+        stampG(j1a,j1c, new Cx(GbeD,0));
+        stampG(j2a,j2c, new Cx(GbcD,0));
+        const trFrom = npn?ncN:ne, trTo = npn?ne:ncN;
+        stampVCCS(trFrom,trTo, j1a,j1c, new Cx(GmF,0));
+        stampVCCS(trFrom,trTo, j2a,j2c, new Cx(-GmR,0));
+        break;
+      }
+      case 'opamp': {
+        const [vp,vn,vout] = ns;
+        stampVCVSout(vout, vp, vn, el.vsrcIndex, new Cx(Math.max(el.value,1),0));
+        break;
+      }
+      case 'nmos': case 'pmos': {
+        // pequeña señal a partir del punto de operación guardado en el.state.vgs/vds
+        const [ng,nd,nsrc] = ns;
+        const k=Math.max(el.value,1e-6), Vth=Math.max(el.vth!==undefined?el.vth:2,0.1), lambda=0.02;
+        const nmos = el.type==='nmos';
+        const vgs = el.state.vgs||0, vds = el.state.vds||0;
+        let gm=0, gds=1e-12;
+        if(vgs>Vth){
+          const vov=vgs-Vth;
+          if(vds<vov){ gm=k*vds; gds=Math.max(k*(vov-vds),1e-9); }
+          else { gm=k*vov*(1+lambda*(vds-vov)); gds=Math.max(0.5*k*vov*vov*lambda,1e-9); }
+        }
+        const deff = nmos?nd:nsrc, seff = nmos?nsrc:nd;
+        const gControl_p = nmos?ng:nsrc, gControl_n = nmos?nsrc:ng;
+        stampG(deff,seff, new Cx(gds,0));
+        stampVCCS(deff,seff, gControl_p,gControl_n, new Cx(gm,0));
+        break;
+      }
+    }
+  }
+  return {A, rhs};
+}
+
+let bodeResults = [];
+function populateBodeSelectors(){
+  const srcSel = document.getElementById('bodeSource');
+  const outSel = document.getElementById('bodeOutput');
+  const srcs = elements.filter(e=>e.type==='acsource');
+  srcSel.innerHTML = srcs.length? srcs.map(e=>`<option value="${e.id}">AC (${e.x1},${e.y1}) ${e.value}V ${e.freq||60}Hz</option>`).join('')
+    : '<option value="">— no hay fuentes AC —</option>';
+  outSel.innerHTML = scopeProbes.length? scopeProbes.map(p=>`<option value="${p.id}">${p.label}</option>`).join('')
+    : '<option value="">— coloca una sonda primero —</option>';
+}
+
+function runBodeSweep(){
+  const srcId = document.getElementById('bodeSource').value;
+  const probeId = document.getElementById('bodeOutput').value;
+  const info = document.getElementById('bodeInfo');
+  const srcEl = elements.find(e=>e.id===srcId);
+  const probeEntry = scopeProbes.find(p=>p.id===probeId);
+  if(!srcEl || !probeEntry){ info.textContent='Selecciona una fuente AC y una sonda de salida.'; bodeResults=[]; drawBode(); return; }
+  const outEl = elements.find(e=>e.id===probeEntry.elemId);
+  const fmin = Math.max(parseFloat(document.getElementById('bodeFmin').value)||1, 0.01);
+  const fmax = Math.max(parseFloat(document.getElementById('bodeFmax').value)||1e5, fmin*10);
+  const ppd = 24;
+  const topo = buildTopology();
+  if(srcEl.vsrcIndex<0){ info.textContent='La fuente elegida no está en el circuito activo.'; return; }
+  const outNode = topo.nodeOf({x:outEl.x1,y:outEl.y1});
+  const decades = Math.log10(fmax/fmin);
+  const totalPoints = Math.max(4, Math.round(decades*ppd));
+  const results=[];
+  for(let i=0;i<=totalPoints;i++){
+    const f = fmin*Math.pow(fmax/fmin, i/totalPoints);
+    const w = 2*Math.PI*f;
+    const {A, rhs} = buildComplexMNA(topo, srcEl, w);
+    const sol = solveComplexLinear(A, rhs);
+    const vout = outNode? sol[outNode-1] : new Cx(0,0);
+    results.push({ f, magDb: 20*Math.log10(Math.max(vout.abs(),1e-12)), phaseDeg: Math.atan2(vout.im,vout.re)*180/Math.PI });
+  }
+  bodeResults = results;
+  info.textContent = 'Barrido de '+fmin+' Hz a '+fmax+' Hz, '+results.length+' puntos.';
+  drawBode();
+}
+
+const bodeCanvas = document.getElementById('bodeCanvas');
+const bctx = bodeCanvas.getContext('2d');
+function resizeBode(){
+  const wrap = document.getElementById('bodeCanvasWrap');
+  bodeCanvas.width = wrap.clientWidth*devicePixelRatio;
+  bodeCanvas.height = wrap.clientHeight*devicePixelRatio;
+}
+function drawBode(){
+  const w=bodeCanvas.width, h=bodeCanvas.height;
+  bctx.fillStyle='#060809'; bctx.fillRect(0,0,w,h);
+  if(!bodeResults.length){
+    bctx.fillStyle='#8b98a9'; bctx.font=(12*devicePixelRatio)+'px monospace';
+    bctx.fillText('Ejecuta un barrido para ver el diagrama de Bode', 10*devicePixelRatio, h/2);
+    return;
+  }
+  const magH = h*0.55, phH = h*0.45;
+  const fmin = bodeResults[0].f, fmax = bodeResults[bodeResults.length-1].f;
+  const logMin = Math.log10(fmin), logMax = Math.log10(fmax);
+  let magMin=Infinity, magMax=-Infinity;
+  for(const r of bodeResults){ if(r.magDb<magMin) magMin=r.magDb; if(r.magDb>magMax) magMax=r.magDb; }
+  magMin=Math.floor((magMin-3)/10)*10; magMax=Math.ceil((magMax+3)/10)*10;
+  if(magMax-magMin<20){ magMax=magMin+20; }
+
+  function xOf(f){ return ((Math.log10(f)-logMin)/(logMax-logMin))*w; }
+  function yMag(db){ return magH - ((db-magMin)/(magMax-magMin))*magH; }
+  function yPh(deg){ return magH + phH - ((deg+180)/360)*phH; }
+
+  // rejilla por décadas
+  bctx.strokeStyle='#1c242e'; bctx.lineWidth=1; bctx.font=(9*devicePixelRatio)+'px monospace'; bctx.fillStyle='#5a6675';
+  const startDec = Math.floor(logMin), endDec = Math.ceil(logMax);
+  for(let d=startDec; d<=endDec; d++){
+    const x = xOf(Math.pow(10,d));
+    if(x<0||x>w) continue;
+    bctx.beginPath(); bctx.moveTo(x,0); bctx.lineTo(x,h); bctx.stroke();
+    bctx.fillText((Math.pow(10,d)>=1000? (Math.pow(10,d)/1000)+'k':Math.pow(10,d))+'Hz', x+3, h-4*devicePixelRatio);
+  }
+  // línea 0dB y -3dB de referencia
+  bctx.strokeStyle='#2c3644';
+  bctx.beginPath(); bctx.moveTo(0,yMag(0)); bctx.lineTo(w,yMag(0)); bctx.stroke();
+  bctx.setLineDash([4,4]);
+  bctx.beginPath(); bctx.moveTo(0,yMag(-3)); bctx.lineTo(w,yMag(-3)); bctx.stroke();
+  bctx.setLineDash([]);
+  bctx.beginPath(); bctx.moveTo(0,magH); bctx.lineTo(w,magH); bctx.stroke();
+  bctx.beginPath(); bctx.moveTo(0,yPh(0)); bctx.lineTo(w,yPh(0)); bctx.stroke();
+
+  // curva de magnitud
+  bctx.strokeStyle='#4fd1c5'; bctx.lineWidth=1.8*devicePixelRatio; bctx.beginPath();
+  bodeResults.forEach((r,i)=>{ const x=xOf(r.f), y=yMag(r.magDb); i===0?bctx.moveTo(x,y):bctx.lineTo(x,y); });
+  bctx.stroke();
+  // curva de fase
+  bctx.strokeStyle='#f6ad55'; bctx.lineWidth=1.8*devicePixelRatio; bctx.beginPath();
+  bodeResults.forEach((r,i)=>{ const x=xOf(r.f), y=yPh(r.phaseDeg); i===0?bctx.moveTo(x,y):bctx.lineTo(x,y); });
+  bctx.stroke();
+
+  bctx.fillStyle='#4fd1c5'; bctx.font=(11*devicePixelRatio)+'px monospace';
+  bctx.fillText('Magnitud (dB): '+magMin+' a '+magMax, 8*devicePixelRatio, 12*devicePixelRatio);
+  bctx.fillStyle='#f6ad55';
+  bctx.fillText('Fase (°): -180 a 180', 8*devicePixelRatio, magH+14*devicePixelRatio);
+}
+
+//////////////////////// EXPORTAR / IMPORTAR CIRCUITO /////////////////////////
+function serializeCircuit(){
+  return JSON.stringify({
+    version:1,
+    elements: elements.map(e=>({id:e.id,type:e.type,x1:e.x1,y1:e.y1,x2:e.x2,y2:e.y2,
+      value:e.value, freq:e.freq, phase:e.phase, wiper:e.wiper, closed:e.closed, vth:e.vth})),
+    probes: scopeProbes.map(p=>({id:p.id, elemId:p.elemId, color:p.color, label:p.label}))
+  }, null, 2);
+}
+function exportCircuit(){
+  const blob = new Blob([serializeCircuit()], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='circuito.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function importCircuitFromText(text){
+  let obj;
+  try{ obj = JSON.parse(text); }catch(err){ alert('Archivo inválido: '+err.message); return; }
+  if(!obj || !Array.isArray(obj.elements)){ alert('El archivo no tiene un formato de circuito reconocible.'); return; }
+  elements = obj.elements.map(e=>({
+    id: e.id || uid(), type:e.type, x1:e.x1,y1:e.y1,x2:e.x2,y2:e.y2,
+    value: e.value, freq: e.freq, phase: e.phase||0, vth: (e.vth!==undefined? e.vth:defaultVth(e.type)),
+    wiper: e.wiper!==undefined? e.wiper:0.5,
+    closed: e.closed!==undefined? e.closed:true,
+    state:{vprev:0,iprev:0,vd:0.1,vbe:0.6,vbc:-0.1,vgs:0,vds:0.1}, vsrcIndex:-1, selected:false
+  }));
+  let maxN=0;
+  for(const e of elements){ const m=/^e(\d+)$/.exec(e.id); if(m) maxN=Math.max(maxN, parseInt(m[1])); }
+  elemCounter = Math.max(elemCounter, maxN);
+  scopeProbes = (obj.probes||[]).map((p,i)=>({ id: p.id||uid(), elemId:p.elemId,
+    color: p.color||PROBE_COLORS[i%PROBE_COLORS.length], label: p.label||('Sonda '+(i+1)) }));
+  scopeData = {}; scopeProbes.forEach(p=>scopeData[p.id]=[]);
+  selected=null; simTime=0;
+  refreshProbeList(); renderProps(); populateBodeSelectors();
+}
+
+//////////////////////// MOTOR DE SIMULACIÓN /////////////////////////////////
+const DT = 5e-5; // paso interno fijo (20 kHz) — buen compromiso estabilidad/velocidad
+
+function stepSimulation(dt){
+  const topo = buildTopology();
+  const { nodeOf, elNodes, nodeCount, vsrcElems } = topo;
+  const matSize = nodeCount + vsrcElems.length;
+  if(matSize<=0){ simTime+=dt; return; }
+
+  // hasta 8 iteraciones de Newton por la no-linealidad de diodos/LED/transistores
+  let nodeVoltages = new Array(matSize).fill(0);
+  const nonlinear = elements.filter(e=>e.type==='diode'||e.type==='led'||e.type==='npn'||e.type==='pnp'||e.type==='nmos'||e.type==='pmos');
+  const iters = nonlinear.length? 8 : 1;
+
+  for(let it=0; it<iters; it++){
+    const A = Array.from({length:matSize},()=>new Array(matSize).fill(0));
+    const rhs = new Array(matSize).fill(0);
+
+    function stampG(n1,n2,g){
+      if(n1) A[n1-1][n1-1]+=g;
+      if(n2) A[n2-1][n2-1]+=g;
+      if(n1&&n2){ A[n1-1][n2-1]-=g; A[n2-1][n1-1]-=g; }
+    }
+    function stampI(n1,n2,i){
+      if(n1) rhs[n1-1]-=i;
+      if(n2) rhs[n2-1]+=i;
+    }
+    function stampV(n1,n2,v,idx){
+      const row = nodeCount+idx;
+      if(n1){ A[n1-1][row]+=1; A[row][n1-1]+=1; }
+      if(n2){ A[n2-1][row]-=1; A[row][n2-1]-=1; }
+      rhs[row]+=v;
+    }
+    // fuente de corriente controlada por tensión (para el modelo Ebers-Moll del
+    // transistor): corriente gm*(Vcp-Vcn) fluyendo de nf a nt (parte lineal;
+    // el término constante se añade aparte con stampI).
+    function stampVCCS(nf,nt,cp,cn,gm){
+      if(nf){ if(cp) A[nf-1][cp-1]+=gm; if(cn) A[nf-1][cn-1]-=gm; }
+      if(nt){ if(cp) A[nt-1][cp-1]-=gm; if(cn) A[nt-1][cn-1]+=gm; }
+    }
+    // fuente de tensión controlada por tensión de salida única (op-amp con
+    // ganancia finita A): Vout = A*(Vp-Vn), corriente de salida sin restricción
+    // (el "retorno" es la alimentación implícita, no modelada).
+    function stampVCVSout(nout,vp,vn,idx,gain){
+      const row = nodeCount+idx;
+      if(nout){ A[nout-1][row]+=1; A[row][nout-1]+=1; }
+      if(vp) A[row][vp-1] -= gain;
+      if(vn) A[row][vn-1] += gain;
+    }
+
+    for(const el of elements){
+      if(el.type==='wire'||el.type==='ground'||el.type==='probe') continue;
+      const ns = elNodes[el.id];
+      switch(el.type){
+        case 'resistor': {
+          const r = Math.max(el.value,1e-6);
+          stampG(ns[0],ns[1], 1/r);
+          break;
+        }
+        case 'potentiometer': {
+          const total = Math.max(el.value,1);
+          const w = Math.min(Math.max(el.wiper,0.001),0.999);
+          const r1 = total*w, r2 = total*(1-w);
+          stampG(ns[0],ns[2], 1/Math.max(r1,1e-3));
+          stampG(ns[2],ns[1], 1/Math.max(r2,1e-3));
+          break;
+        }
+        case 'capacitor': {
+          const c = Math.max(el.value,1e-15);
+          const g = c/dt;
+          stampG(ns[0],ns[1], g);
+          stampI(ns[0],ns[1], -g*el.state.vprev);
+          break;
+        }
+        case 'inductor': {
+          const l = Math.max(el.value,1e-9);
+          const g = dt/l;
+          stampG(ns[0],ns[1], g);
+          stampI(ns[0],ns[1], el.state.iprev);
+          break;
+        }
+        case 'dcsource': {
+          stampV(ns[0],ns[1], el.value, el.vsrcIndex);
+          break;
+        }
+        case 'acsource': {
+          const v = el.value*Math.sin(2*Math.PI*(el.freq||60)*simTime + (el.phase||0));
+          stampV(ns[0],ns[1], v, el.vsrcIndex);
+          break;
+        }
+        case 'currentsource': {
+          stampI(ns[0],ns[1], el.value);
+          break;
+        }
+        case 'switch': {
+          const r = el.closed ? 0.01 : 1e9;
+          stampG(ns[0],ns[1], 1/r);
+          break;
+        }
+        case 'diode':
+        case 'led': {
+          const Is = el.type==='led' ? 1e-15 : 1e-12;
+          const Vt = el.type==='led' ? 0.052 : 0.026; // ideality*Vt aproximado para simular Vf mayor en LED
+          let vd = el.state.vd;
+          vd = Math.max(Math.min(vd, 1.5), -5);
+          const ex = Math.exp(Math.min(vd/Vt, 40));
+          const Id = Is*(ex-1);
+          const Geq = Math.max(Is/Vt*ex, 1e-12);
+          const Ieq = Id - Geq*vd;
+          stampG(ns[0],ns[1], Geq);
+          stampI(ns[0],ns[1], Ieq);
+          break;
+        }
+        case 'npn': case 'pnp': {
+          // Modelo Ebers-Moll / SPIE simplificado, correcto:
+          // - Los diodos B-E y B-C llevan la corriente de RECOMBINACIÓN de base
+          //   (usan IS/BF e IS/BR, no la IS de transporte completa).
+          // - La corriente de colector es un término de "transporte" INDEPENDIENTE
+          //   (IS completa) entre emisor y colector, controlado por Vbe Y Vbc.
+          const [nb, ncN, ne] = ns;
+          const IS = 1e-14, Vt = 0.026, betaF = Math.max(el.value,1), betaR = 1;
+          const ISE = IS/betaF, ISC = IS/betaR;
+          const npn = el.type==='npn';
+          let vbe = Math.max(Math.min(el.state.vbe, 1.5), -5);
+          let vbc = Math.max(Math.min(el.state.vbc, 1.5), -5);
+          const exBE = Math.exp(Math.min(vbe/Vt,40)), exBC = Math.exp(Math.min(vbc/Vt,40));
+          // diodos de recombinación de base (pequeños, escalados por beta)
+          const IbeD = ISE*(exBE-1), GbeD = Math.max(ISE/Vt*exBE, 1e-16);
+          const IbcD = ISC*(exBC-1), GbcD = Math.max(ISC/Vt*exBC, 1e-16);
+          const IeqBE = IbeD - GbeD*vbe, IeqBC = IbcD - GbcD*vbc;
+          const j1a = npn?nb:ne, j1c = npn?ne:nb;   // unión base-emisor
+          const j2a = npn?nb:ncN, j2c = npn?ncN:nb; // unión base-colector
+          stampG(j1a,j1c, GbeD); stampI(j1a,j1c, IeqBE);
+          stampG(j2a,j2c, GbcD); stampI(j2a,j2c, IeqBC);
+          // corriente de transporte (IS completa), controlada por vbe Y vbc,
+          // fluye de emisor a colector (invertido en PNP)
+          const GmF = IS/Vt*exBE, GmR = IS/Vt*exBC;
+          const Itr0 = IS*(exBE-exBC);
+          const IeqTr = Itr0 - GmF*vbe + GmR*vbc;
+          const trFrom = npn?ncN:ne, trTo = npn?ne:ncN; // corriente de transporte: C->E (NPN) / E->C (PNP)
+          stampVCCS(trFrom,trTo, j1a,j1c, GmF);
+          stampVCCS(trFrom,trTo, j2a,j2c, -GmR);
+          stampI(trFrom,trTo, IeqTr);
+          break;
+        }
+        case 'opamp': {
+          // pines: [entrada+, entrada-, salida]. Vout = A*(Vp-Vn), lineal, sin
+          // necesidad de iteración de Newton.
+          const [vp,vn,vout] = ns;
+          stampVCVSout(vout, vp, vn, el.vsrcIndex, Math.max(el.value,1));
+          break;
+        }
+        case 'nmos': case 'pmos': {
+          // Modelo de nivel 1 (Shichman-Hodges) con modulación de canal ligera
+          // (lambda fijo) para estabilidad numérica. Newton-Raphson sobre vgs/vds.
+          const [ng, nd, nsrc] = ns;
+          const k = Math.max(el.value, 1e-6);
+          const Vth = Math.max(el.vth!==undefined? el.vth:2, 0.1);
+          const lambda = 0.02;
+          const nmos = el.type==='nmos';
+          let vgs = Math.max(Math.min(el.state.vgs, 20), -20);
+          let vds = Math.max(Math.min(el.state.vds, 20), -20);
+          let Id, gm, gds;
+          if(vgs<=Vth){
+            Id=0; gm=0; gds=1e-12;
+          } else {
+            const vov = vgs-Vth;
+            if(vds < vov){ // triodo
+              Id = k*(vov*vds - 0.5*vds*vds);
+              gm = k*vds;
+              gds = Math.max(k*(vov-vds), 1e-9);
+            } else { // saturación
+              Id = 0.5*k*vov*vov*(1+lambda*(vds-vov));
+              gm = k*vov*(1+lambda*(vds-vov));
+              gds = Math.max(0.5*k*vov*vov*lambda, 1e-9);
+            }
+          }
+          const IeqMos = Id - gm*vgs - gds*vds;
+          // nodos efectivos (drenador/fuente se invierten en PMOS, igual que en el BJT)
+          const deff = nmos?nd:nsrc, seff = nmos?nsrc:nd;
+          const gControl_p = nmos?ng:nsrc, gControl_n = nmos?nsrc:ng;
+          stampG(deff,seff, gds);
+          stampVCCS(deff,seff, gControl_p,gControl_n, gm);
+          stampI(deff,seff, IeqMos);
+          break;
+        }
+      }
+    }
+
+    nodeVoltages = solveLinear(A, rhs);
+
+    // actualizar el punto de operación de diodos/LED/transistores (Newton)
+    for(const el of elements){
+      if(el.type==='diode' || el.type==='led'){
+        const ns = elNodes[el.id];
+        const v1 = ns[0]? nodeVoltages[ns[0]-1] : 0;
+        const v2 = ns[1]? nodeVoltages[ns[1]-1] : 0;
+        el.state.vd = v1-v2;
+      } else if(el.type==='npn' || el.type==='pnp'){
+        const [nb,ncN,ne] = elNodes[el.id];
+        const Vb=nb?nodeVoltages[nb-1]:0, Vc=ncN?nodeVoltages[ncN-1]:0, Ve=ne?nodeVoltages[ne-1]:0;
+        const sign = el.type==='npn'?1:-1;
+        el.state.vbe = sign*(Vb-Ve);
+        el.state.vbc = sign*(Vb-Vc);
+      } else if(el.type==='nmos' || el.type==='pmos'){
+        const [ng,nd,nsrc] = elNodes[el.id];
+        const Vg=ng?nodeVoltages[ng-1]:0, Vd=nd?nodeVoltages[nd-1]:0, Vs=nsrc?nodeVoltages[nsrc-1]:0;
+        const sign = el.type==='nmos'?1:-1;
+        el.state.vgs = sign*(Vg-Vs);
+        el.state.vds = sign*(Vd-Vs);
+      }
+    }
+  }
+
+  // guardar tensiones/corrientes en cada elemento para dibujar y para el osciloscopio
+  for(const el of elements){
+    if(el.type==='wire'||el.type==='ground') continue;
+    const ns = el.type==='probe' ? [nodeOf({x:el.x1,y:el.y1})] : elNodes[el.id];
+    const v1 = ns[0]? nodeVoltages[ns[0]-1] : 0;
+    const v2 = (ns[1]!==undefined && ns[1])? nodeVoltages[ns[1]-1] : 0;
+    el._v1 = v1; el._v2 = v2; el._vdrop = v1-v2;
+    switch(el.type){
+      case 'resistor': el._current = el._vdrop/Math.max(el.value,1e-6); break;
+      case 'capacitor': {
+        const g = Math.max(el.value,1e-15)/dt;
+        el._current = g*(el._vdrop - el.state.vprev);
+        el.state.vprev = el._vdrop;
+        break;
+      }
+      case 'inductor': {
+        const g = dt/Math.max(el.value,1e-9);
+        el.state.iprev = el.state.iprev + g*el._vdrop;
+        el._current = el.state.iprev;
+        break;
+      }
+      case 'switch': el._current = el._vdrop/(el.closed?0.01:1e9); break;
+      case 'diode': case 'led': {
+        const Is = el.type==='led'?1e-15:1e-12;
+        const Vt = el.type==='led'?0.052:0.026;
+        el._current = Is*(Math.exp(Math.min(el._vdrop/Vt,40))-1);
+        break;
+      }
+      case 'dcsource': case 'acsource': {
+        const idx = nodeCount + el.vsrcIndex;
+        el._current = nodeVoltages[idx] || 0;
+        break;
+      }
+      case 'npn': case 'pnp': {
+        const [nb,ncN,ne] = ns;
+        const Vb=nb?nodeVoltages[nb-1]:0, Vc=ncN?nodeVoltages[ncN-1]:0, Ve=ne?nodeVoltages[ne-1]:0;
+        const sign = el.type==='npn'?1:-1;
+        const IS=1e-14, Vt=0.026, betaF=Math.max(el.value,1), betaR=1;
+        const ISE=IS/betaF, ISC=IS/betaR;
+        const vbe=sign*(Vb-Ve), vbc=sign*(Vb-Vc);
+        const exBE=Math.exp(Math.min(vbe/Vt,40)), exBC=Math.exp(Math.min(vbc/Vt,40));
+        const IbeD = ISE*(exBE-1), IbcD = ISC*(exBC-1); // corrientes de recombinación (=Ib real)
+        const Itr = IS*(exBE-exBC);                      // corriente de transporte E->C
+        const Ib = IbeD+IbcD, Ic = Itr-IbcD, Ie = -(Ib+Ic);
+        el._ib=Ib; el._ic=Ic; el._ie=Ie; el._vce=sign*(Vc-Ve); el._current=Ic;
+        break;
+      }
+      case 'opamp': {
+        const idx = nodeCount + el.vsrcIndex;
+        el._current = nodeVoltages[idx] || 0; // corriente de salida entregada
+        break;
+      }
+      case 'nmos': case 'pmos': {
+        const [ng,nd,nsrc] = ns;
+        const Vg=ng?nodeVoltages[ng-1]:0, Vd=nd?nodeVoltages[nd-1]:0, Vs=nsrc?nodeVoltages[nsrc-1]:0;
+        const sign = el.type==='nmos'?1:-1;
+        const k=Math.max(el.value,1e-6), Vth=Math.max(el.vth!==undefined?el.vth:2,0.1), lambda=0.02;
+        const vgs=sign*(Vg-Vs), vds=sign*(Vd-Vs);
+        let Id=0;
+        if(vgs>Vth){
+          const vov=vgs-Vth;
+          Id = vds<vov ? k*(vov*vds-0.5*vds*vds) : 0.5*k*vov*vov*(1+lambda*(vds-vov));
+        }
+        el._id=Id; el._vgs=vgs; el._vds=vds; el._current=Id;
+        break;
+      }
+      default: el._current = 0;
+    }
+  }
+
+  simTime += dt;
+
+  // registrar muestras de osciloscopio
+  for(const p of scopeProbes){
+    const el = elements.find(e=>e.id===p.elemId);
+    if(!el) continue;
+    let val;
+    if(el.type==='probe') val = el._v1;
+    else val = el._vdrop;
+    if(!scopeData[p.id]) scopeData[p.id]=[];
+    const arr = scopeData[p.id];
+    arr.push({t:simTime, v:val});
+    const cutoff = simTime - SCOPE_BUFFER_SECONDS;
+    while(arr.length && arr[0].t<cutoff) arr.shift();
+  }
+}
+
+//////////////////////// BUCLE PRINCIPAL /////////////////////////////////////
+let lastFrameTime = null;
+let speedMultiplier = 1;
+
+function frame(ts){
+  if(lastFrameTime===null) lastFrameTime = ts;
+  const realDt = Math.min((ts-lastFrameTime)/1000, 0.05);
+  lastFrameTime = ts;
+
+  if(running && elements.length){
+    const simDtWanted = realDt * speedMultiplier;
+    let steps = Math.round(simDtWanted/DT);
+    steps = Math.max(0, Math.min(steps, 400)); // limitar por frame
+    for(let i=0;i<steps;i++) stepSimulation(DT);
+  }
+  draw();
+  drawScope();
+  document.getElementById('simTime').textContent = 't = ' + simTime.toFixed(4) + ' s';
+  requestAnimationFrame(frame);
+}
+
+//////////////////////// DIBUJO DEL CIRCUITO //////////////////////////////////
+function snap(v){ return Math.round(v/GRID)*GRID; }
+
+function drawGrid(){
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg');
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle = '#232b36';
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let x=0;x<=canvas.width;x+=GRID){ ctx.moveTo(x+0.5,0); ctx.lineTo(x+0.5,canvas.height); }
+  for(let y=0;y<=canvas.height;y+=GRID){ ctx.moveTo(0,y+0.5); ctx.lineTo(canvas.width,y+0.5); }
+  ctx.stroke();
+}
+
+function rot(dx,dy){ // ángulo del segmento
+  return Math.atan2(dy,dx);
+}
+
+function drawTwoTerminal(el, drawSymbol){
+  const {x1,y1,x2,y2} = el;
+  const len = Math.hypot(x2-x1,y2-y1);
+  const angle = rot(x2-x1,y2-y1);
+  ctx.save();
+  ctx.translate(x1,y1);
+  ctx.rotate(angle);
+  ctx.strokeStyle = el.selected? '#4fd1c5' : '#c9d3de';
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.lineWidth = el.selected? 2.5 : 2;
+  // terminales (líneas hasta el "cuerpo" del símbolo, cuerpo centrado)
+  const bodyHalf = Math.min(28, len*0.35);
+  ctx.beginPath();
+  ctx.moveTo(0,0); ctx.lineTo(len/2-bodyHalf,0);
+  ctx.moveTo(len/2+bodyHalf,0); ctx.lineTo(len,0);
+  ctx.stroke();
+  drawSymbol(len, bodyHalf);
+  ctx.restore();
+
+  // pines (puntos)
+  drawPin(x1,y1); drawPin(x2,y2);
+}
+
+function drawPin(x,y){
+  ctx.beginPath();
+  ctx.arc(x,y,3,0,Math.PI*2);
+  ctx.fillStyle='#5a6675';
+  ctx.fill();
+}
+
+function niceUnit(v, unit){
+  if(v===null||v===undefined||isNaN(v)) return '';
+  const abs=Math.abs(v);
+  const pfx=[['G',1e9],['M',1e6],['k',1e3],['',1],['m',1e-3],['µ',1e-6],['n',1e-9],['p',1e-12]];
+  for(const [p,f] of pfx){ if(abs>=f){ return (v/f).toFixed(v/f>=100?0:(v/f>=10?1:2))+p+unit; } }
+  return v.toExponential(2)+unit;
+}
+
+function drawElement(el){
+  switch(el.type){
+    case 'wire': {
+      ctx.strokeStyle = el.selected? '#4fd1c5' : '#96a2b0';
+      ctx.lineWidth = el.selected?3:2.5;
+      ctx.beginPath(); ctx.moveTo(el.x1,el.y1); ctx.lineTo(el.x2,el.y2); ctx.stroke();
+      drawPin(el.x1,el.y1); drawPin(el.x2,el.y2);
+      break;
+    }
+    case 'ground': {
+      ctx.save();
+      ctx.translate(el.x1,el.y1);
+      ctx.strokeStyle= el.selected? '#4fd1c5' : '#c9d3de'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,14); ctx.stroke();
+      ctx.beginPath();
+      for(let i=0;i<3;i++){
+        const w=12-i*4, y=14+i*4;
+        ctx.moveTo(-w/2,y); ctx.lineTo(w/2,y);
+      }
+      ctx.stroke();
+      ctx.restore();
+      drawPin(el.x1,el.y1);
+      break;
+    }
+    case 'probe': {
+      const p = scopeProbes.find(p=>p.elemId===el.id);
+      const col = p? p.color : '#8b98a9';
+      ctx.beginPath();
+      ctx.arc(el.x1,el.y1,6,0,Math.PI*2);
+      ctx.fillStyle=col; ctx.fill();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.2; ctx.stroke();
+      if(el.selected){ ctx.beginPath(); ctx.arc(el.x1,el.y1,10,0,Math.PI*2); ctx.strokeStyle='#4fd1c5'; ctx.stroke(); }
+      break;
+    }
+    case 'resistor': {
+      drawTwoTerminal(el,(len,bh)=>{
+        const zig=6, w=bh*2, seg=w/zig;
+        ctx.beginPath();
+        let x=len/2-bh, y=0;
+        ctx.moveTo(x,y);
+        for(let i=0;i<zig;i++){
+          x+=seg/2;
+          y = (i%2===0)? -8 : 8;
+          ctx.lineTo(x,y);
+          x+=seg/2; y=0;
+          ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+      });
+      labelValue(el, niceUnit(el.value,'Ω'));
+      break;
+    }
+    case 'capacitor': {
+      drawTwoTerminal(el,(len)=>{
+        ctx.beginPath();
+        ctx.moveTo(-6,-14); ctx.lineTo(-6,14);
+        ctx.moveTo(6,-14); ctx.lineTo(6,14);
+        ctx.stroke();
+      });
+      labelValue(el, niceUnit(el.value,'F'));
+      break;
+    }
+    case 'inductor': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath();
+        const loops=4, w=bh*2, r=w/(loops*2);
+        let x=len/2-bh;
+        for(let i=0;i<loops;i++){
+          ctx.moveTo(x,0);
+          ctx.arc(x+r,0,r,Math.PI,0,false);
+          x+=2*r;
+        }
+        ctx.stroke();
+      });
+      labelValue(el, niceUnit(el.value,'H'));
+      break;
+    }
+    case 'potentiometer': {
+      const ps = pins(el);
+      ctx.strokeStyle = el.selected?'#4fd1c5':'#c9d3de'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(ps[0].x,ps[0].y); ctx.lineTo(ps[1].x,ps[1].y); ctx.stroke();
+      const mx=(ps[0].x+ps[1].x)/2, my=(ps[0].y+ps[1].y)/2;
+      ctx.save();
+      ctx.translate(mx,my);
+      const ang = rot(ps[1].x-ps[0].x, ps[1].y-ps[0].y);
+      ctx.rotate(ang);
+      ctx.strokeRect(-16,-8,32,16);
+      ctx.restore();
+      ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(ps[2].x,ps[2].y); ctx.stroke();
+      drawPin(ps[0].x,ps[0].y); drawPin(ps[1].x,ps[1].y); drawPin(ps[2].x,ps[2].y);
+      labelAt(ps[2].x,ps[2].y-10, niceUnit(el.value,'Ω') + ' ('+Math.round(el.wiper*100)+'%)');
+      break;
+    }
+    case 'dcsource': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath();
+        ctx.moveTo(-4,-16); ctx.lineTo(-4,16);
+        ctx.moveTo(4,-9); ctx.lineTo(4,9);
+        ctx.stroke();
+        ctx.font='11px sans-serif'; ctx.textAlign='center';
+        ctx.fillText('+', -4, -20);
+      });
+      labelValue(el, el.value.toFixed(2)+'V');
+      break;
+    }
+    case 'acsource': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath(); ctx.arc(0,0,bh,0,Math.PI*2); ctx.stroke();
+        ctx.beginPath();
+        for(let i=-bh*0.7;i<=bh*0.7;i+=1){
+          const yy = -Math.sin(i/(bh*0.7)*Math.PI)*7;
+          if(i===-bh*0.7) ctx.moveTo(i,yy); else ctx.lineTo(i,yy);
+        }
+        ctx.stroke();
+      });
+      labelValue(el, el.value.toFixed(1)+'V '+ (el.freq||60)+'Hz');
+      break;
+    }
+    case 'currentsource': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath(); ctx.arc(0,0,bh,0,Math.PI*2); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-bh*0.5,0); ctx.lineTo(bh*0.5,0);
+        ctx.moveTo(bh*0.5,0); ctx.lineTo(bh*0.15,-6);
+        ctx.moveTo(bh*0.5,0); ctx.lineTo(bh*0.15,6);
+        ctx.stroke();
+      });
+      labelValue(el, niceUnit(el.value,'A'));
+      break;
+    }
+    case 'switch': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath();
+        ctx.arc(-bh,0,2.5,0,Math.PI*2); ctx.fill();
+        ctx.arc(bh,0,2.5,0,Math.PI*2); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(-bh,0);
+        if(el.closed) ctx.lineTo(bh,0);
+        else ctx.lineTo(bh*0.3,-12);
+        ctx.stroke();
+      });
+      labelValue(el, el.closed?'Cerrado':'Abierto');
+      break;
+    }
+    case 'diode': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath();
+        ctx.moveTo(-8,-9); ctx.lineTo(-8,9); ctx.lineTo(8,0); ctx.closePath();
+        ctx.fill();
+        ctx.beginPath(); ctx.moveTo(8,-9); ctx.lineTo(8,9); ctx.stroke();
+      });
+      labelValue(el, (el._current!==undefined? niceUnit(el._current,'A'):''));
+      break;
+    }
+    case 'led': {
+      const glow = el._current && el._current>0.0005;
+      drawTwoTerminal(el,(len,bh)=>{
+        if(glow){
+          ctx.save();
+          ctx.shadowColor='#f6ad55'; ctx.shadowBlur=16;
+        }
+        ctx.fillStyle = glow? '#ffb454' : (el.selected?'#4fd1c5':'#c9d3de');
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.beginPath();
+        ctx.moveTo(-8,-9); ctx.lineTo(-8,9); ctx.lineTo(8,0); ctx.closePath();
+        ctx.fill();
+        ctx.beginPath(); ctx.moveTo(8,-9); ctx.lineTo(8,9); ctx.stroke();
+        if(glow) ctx.restore();
+      });
+      labelValue(el, (el._current!==undefined? niceUnit(Math.max(el._current,0),'A'):''));
+      break;
+    }
+    case 'npn': case 'pnp': {
+      let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<40) L=40;
+      const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+      ctx.save();
+      ctx.translate(el.x1,el.y1);
+      ctx.rotate(ang);
+      ctx.strokeStyle = el.selected? '#4fd1c5' : '#c9d3de';
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = el.selected? 2.5 : 2;
+      // patilla de base + barra vertical
+      ctx.beginPath();
+      ctx.moveTo(0,0); ctx.lineTo(L*0.5,0);
+      ctx.moveTo(L*0.5,-L*0.35); ctx.lineTo(L*0.5,L*0.35);
+      ctx.stroke();
+      // colector y emisor
+      ctx.beginPath();
+      ctx.moveTo(L*0.5,-L*0.28); ctx.lineTo(L,-L*0.4);
+      ctx.moveTo(L*0.5,L*0.28); ctx.lineTo(L,L*0.4);
+      ctx.stroke();
+      // flecha en el emisor (hacia fuera en NPN, hacia la base en PNP)
+      const leadAngle = Math.atan2(L*0.4-L*0.28, L*0.5);
+      const t = 0.72;
+      ctx.save();
+      ctx.translate(L*0.5 + (L*0.5)*t, L*0.28 + (L*0.12)*t);
+      ctx.rotate(el.type==='npn'? leadAngle : leadAngle+Math.PI);
+      ctx.beginPath();
+      ctx.moveTo(0,0); ctx.lineTo(-7,-3); ctx.lineTo(-7,3); ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.restore();
+      const [basePt,colPt,emPt] = pins(el);
+      drawPin(basePt.x,basePt.y); drawPin(colPt.x,colPt.y); drawPin(emPt.x,emPt.y);
+      const cx=(basePt.x+colPt.x+emPt.x)/3, cy=(basePt.y+colPt.y+emPt.y)/3;
+      labelAt(cx, cy-24, (el.type==='npn'?'NPN':'PNP')+' hFE='+el.value +
+        (el._ic!==undefined? '  Ic='+niceUnit(el._ic,'A'):''));
+      break;
+    }
+    case 'nmos': case 'pmos': {
+      let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<40) L=40;
+      const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+      ctx.save();
+      ctx.translate(el.x1,el.y1);
+      ctx.rotate(ang);
+      ctx.strokeStyle = el.selected? '#4fd1c5' : '#c9d3de';
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = el.selected? 2.5 : 2;
+      // patilla de puerta + barra de canal
+      ctx.beginPath();
+      ctx.moveTo(0,0); ctx.lineTo(L*0.45,0);
+      ctx.moveTo(L*0.45,-L*0.3); ctx.lineTo(L*0.45,L*0.3);
+      ctx.stroke();
+      // drenador y fuente
+      ctx.beginPath();
+      ctx.moveTo(L*0.58,-L*0.3); ctx.lineTo(L*0.58,-L*0.05); ctx.lineTo(L,-L*0.05); ctx.lineTo(L,-L*0.4);
+      ctx.moveTo(L*0.58,L*0.3); ctx.lineTo(L*0.58,L*0.05); ctx.lineTo(L,L*0.05); ctx.lineTo(L,L*0.4);
+      ctx.stroke();
+      // flecha en la fuente (indica el tipo, como el símbolo estándar de MOSFET)
+      const t2 = 0.5;
+      ctx.save();
+      ctx.translate(L*0.58, L*0.3 - (L*0.25)*t2);
+      ctx.rotate(el.type==='nmos'? Math.PI/2 : -Math.PI/2);
+      ctx.beginPath();
+      ctx.moveTo(0,0); ctx.lineTo(-6,-3); ctx.lineTo(-6,3); ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.restore();
+      const [gPt,dPt,sPt] = pins(el);
+      drawPin(gPt.x,gPt.y); drawPin(dPt.x,dPt.y); drawPin(sPt.x,sPt.y);
+      const cx2=(gPt.x+dPt.x+sPt.x)/3, cy2=(gPt.y+dPt.y+sPt.y)/3;
+      labelAt(cx2, cy2-24, (el.type==='nmos'?'NMOS':'PMOS') +
+        (el._id!==undefined? '  Id='+niceUnit(el._id,'A'):''));
+      break;
+    }
+    case 'opamp': {
+      const [vp,vn,vout] = pins(el);
+      let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<50) L=50;
+      const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+      ctx.save();
+      ctx.translate(el.x1,el.y1);
+      ctx.rotate(ang);
+      ctx.strokeStyle = el.selected? '#4fd1c5' : '#c9d3de';
+      ctx.fillStyle = 'rgba(79,209,197,0.06)';
+      ctx.lineWidth = el.selected? 2.5 : 2;
+      // triángulo del amplificador
+      ctx.beginPath();
+      ctx.moveTo(0,-L*0.3); ctx.lineTo(0,L*0.3); ctx.lineTo(L,0); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      // patillas
+      ctx.beginPath();
+      ctx.moveTo(-L*0.18,-L*0.3); ctx.lineTo(0,-L*0.3);
+      ctx.moveTo(-L*0.18,L*0.3); ctx.lineTo(0,L*0.3);
+      ctx.moveTo(L,0); ctx.lineTo(L*1.18,0);
+      ctx.stroke();
+      ctx.font='12px sans-serif'; ctx.textAlign='left'; ctx.fillStyle=ctx.strokeStyle;
+      ctx.fillText('+', 6, -L*0.3+13);
+      ctx.fillText('−', 6, L*0.3+2);
+      ctx.restore();
+      drawPin(vp.x,vp.y); drawPin(vn.x,vn.y); drawPin(vout.x,vout.y);
+      const cx3=(vp.x+vn.x)/2, cy3=(vp.y+vn.y)/2;
+      labelAt(cx3-10, cy3-L*0.5-6, 'A='+niceUnit(el.value,''));
+      break;
+    }
+  }
+}
+
+function labelValue(el, text){
+  const mx=(el.x1+el.x2)/2, my=(el.y1+el.y2)/2;
+  labelAt(mx, my-16, text);
+}
+function labelAt(x,y,text){
+  if(!text) return;
+  ctx.font='11px monospace';
+  ctx.textAlign='center';
+  ctx.fillStyle='#8b98a9';
+  ctx.fillText(text, x, y);
+}
+
+function drawPreview(){
+  if(!dragStart || !dragEnd) return;
+  ctx.save();
+  ctx.globalAlpha=0.55;
+  const tmp = makeElement(currentTool, dragStart.x, dragStart.y, dragEnd.x, dragEnd.y);
+  drawElement(tmp);
+  ctx.restore();
+}
+
+function draw(){
+  drawGrid();
+  for(const el of elements) drawElement(el);
+  drawPreview();
+  if(document.getElementById('showCurrent').checked && running){
+    drawCurrentAnimation();
+  }
+}
+
+let animPhase=0;
+function drawCurrentAnimation(){
+  animPhase += 0.4;
+  ctx.fillStyle='#4fd1c5';
+  for(const el of elements){
+    if(!['resistor','wire','inductor','switch'].includes(el.type)) continue;
+    const cur = el._current||0;
+    if(Math.abs(cur) < 1e-6) continue;
+    const len = Math.hypot(el.x2-el.x1, el.y2-el.y1);
+    const n = Math.max(1, Math.floor(len/16));
+    const dir = cur>0 ? 1 : -1;
+    for(let i=0;i<n;i++){
+      let t = ((i/n) + (animPhase*0.02*dir)) % 1;
+      if(t<0) t+=1;
+      const x = el.x1+(el.x2-el.x1)*t;
+      const y = el.y1+(el.y2-el.y1)*t;
+      ctx.beginPath(); ctx.arc(x,y,1.6,0,Math.PI*2); ctx.fill();
+    }
+  }
+}
+
+//////////////////////// OSCILOSCOPIO ////////////////////////////////////////
+const scopeCanvas = document.getElementById('scopeCanvas');
+const sctx = scopeCanvas.getContext('2d');
+function resizeScope(){
+  const wrap = document.getElementById('scopeCanvasWrap');
+  scopeCanvas.width = wrap.clientWidth * devicePixelRatio;
+  scopeCanvas.height = wrap.clientHeight * devicePixelRatio;
+  scopeCanvas.style.width = wrap.clientWidth+'px';
+  scopeCanvas.style.height = wrap.clientHeight+'px';
+}
+window.addEventListener('resize', resizeScope);
+
+function drawScope(){
+  const w = scopeCanvas.width, h = scopeCanvas.height;
+  sctx.fillStyle='#060809'; sctx.fillRect(0,0,w,h);
+  const voltsDiv = +document.getElementById('voltsDiv').value / 10; // V por división
+  const timeDivSec = (+document.getElementById('timeDiv').value/1000); // s por división
+  const divsX=10, divsY=8;
+  const cellW = w/divsX, cellH = h/divsY;
+
+  sctx.strokeStyle='#1c242e'; sctx.lineWidth=1;
+  sctx.beginPath();
+  for(let i=0;i<=divsX;i++){ sctx.moveTo(i*cellW,0); sctx.lineTo(i*cellW,h); }
+  for(let j=0;j<=divsY;j++){ sctx.moveTo(0,j*cellH); sctx.lineTo(w,j*cellH); }
+  sctx.stroke();
+  sctx.strokeStyle='#2c3644';
+  sctx.beginPath(); sctx.moveTo(0,h/2); sctx.lineTo(w,h/2); sctx.stroke();
+
+  const tWindow = timeDivSec*divsX;
+  const tEnd = simTime;
+  const tStart = tEnd - tWindow;
+
+  for(const p of scopeProbes){
+    const arr = scopeData[p.id];
+    if(!arr || arr.length<2) continue;
+    sctx.strokeStyle = p.color;
+    sctx.lineWidth = 1.8;
+    sctx.beginPath();
+    let started=false;
+    for(const s of arr){
+      if(s.t<tStart) continue;
+      const x = ((s.t - tStart)/tWindow)*w;
+      const y = h/2 - (s.v/voltsDiv)*cellH;
+      if(!started){ sctx.moveTo(x,y); started=true; } else sctx.lineTo(x,y);
+    }
+    sctx.stroke();
+  }
+  sctx.fillStyle='#8b98a9';
+  sctx.font=(11*devicePixelRatio)+'px monospace';
+  sctx.fillText(voltsDiv.toFixed(2)+' V/div   '+ (timeDivSec*1000).toFixed(1)+' ms/div', 8*devicePixelRatio, 14*devicePixelRatio);
+}
+
+function refreshProbeList(){
+  const box = document.getElementById('probeList');
+  box.innerHTML='';
+  scopeProbes.forEach(p=>{
+    const row=document.createElement('div'); row.className='probe-row';
+    const dot=document.createElement('div'); dot.className='probe-dot'; dot.style.background=p.color;
+    const span=document.createElement('span'); span.textContent=p.label;
+    const btn=document.createElement('button'); btn.textContent='✕';
+    btn.onclick=()=>{
+      scopeProbes = scopeProbes.filter(x=>x.id!==p.id);
+      delete scopeData[p.id];
+      elements = elements.filter(e=>e.id!==p.elemId);
+      refreshProbeList();
+    };
+    row.append(dot,span,btn);
+    box.appendChild(row);
+  });
+}
+
+//////////////////////// INTERACCIÓN DE USUARIO ///////////////////////////////
+function setTool(tool){
+  currentTool = tool;
+  document.querySelectorAll('.comp-btn').forEach(b=>b.classList.toggle('active', b.dataset.tool===tool));
+  const hints = {
+    select:'Haz clic para seleccionar. Clic y arrastra sobre lo ya seleccionado para moverlo. Supr para borrar.',
+    wire:'Arrastra para dibujar un cable entre dos puntos.',
+    ground:'Haz clic para colocar una tierra.',
+    probe:'Haz clic sobre un cable/pin existente para colocar una sonda de osciloscopio.',
+    switch:'Arrastra para colocar el interruptor. En modo Seleccionar, haz clic sobre él para abrir/cerrar.'
+  };
+  document.getElementById('hint').textContent = hints[tool] || 'Arrastra sobre el lienzo para colocar el componente.';
+}
+document.querySelectorAll('.comp-btn').forEach(b=>{
+  b.addEventListener('click', ()=>setTool(b.dataset.tool));
+});
+setTool('select');
+
+function getMouseGrid(e){
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX-rect.left, y = e.clientY-rect.top;
+  return {x:snap(x), y:snap(y)};
+}
+function hitTest(x,y){
+  const tol=9;
+  // buscar el más cercano (prioriza probes/ground por ser puntuales)
+  let best=null, bestD=tol;
+  for(const el of elements){
+    if(el.type==='ground'||el.type==='probe'){
+      const d=Math.hypot(x-el.x1,y-el.y1);
+      if(d<bestD){bestD=d; best=el;}
+      continue;
+    }
+    const ps = pins(el).length>2 ? [{x:el.x1,y:el.y1},{x:el.x2,y:el.y2}] : pins(el);
+    const {x1,y1}=el, {x2,y2}=el;
+    const d = distToSegment(x,y,x1,y1,x2,y2);
+    if(d<bestD){ bestD=d; best=el; }
+  }
+  return best;
+}
+function distToSegment(px,py,x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1;
+  const len2=dx*dx+dy*dy;
+  if(len2===0) return Math.hypot(px-x1,py-y1);
+  let t=((px-x1)*dx+(py-y1)*dy)/len2;
+  t=Math.max(0,Math.min(1,t));
+  const cx=x1+t*dx, cy=y1+t*dy;
+  return Math.hypot(px-cx,py-cy);
+}
+function nearestExistingPoint(x,y){
+  // busca un pin existente cercano para "pegar" la sonda o el nuevo cable
+  let best=null, bestD=14;
+  for(const el of elements){
+    for(const p of pins(el)){
+      const d=Math.hypot(x-p.x,y-p.y);
+      if(d<bestD){bestD=d;best=p;}
+    }
+  }
+  return best;
+}
+
+let moveDrag = null; // {el, startX, startY, origX1,Y1,X2,Y2} — mover un componente ya colocado
+
+canvas.addEventListener('mousedown', (e)=>{
+  const g = getMouseGrid(e);
+  if(currentTool==='select'){
+    const hit = hitTest(g.x,g.y);
+    if(hit && hit===selected){
+      // segundo clic sobre el ya seleccionado: iniciar arrastre para moverlo
+      moveDrag = { el:hit, startX:g.x, startY:g.y, x1:hit.x1,y1:hit.y1,x2:hit.x2,y2:hit.y2 };
+      return;
+    }
+    selectElement(hit);
+    if(hit && hit.type==='switch'){
+      hit.closed = !hit.closed;
+    }
+    return;
+  }
+  if(currentTool==='ground'){
+    const snapPt = nearestExistingPoint(g.x,g.y) || g;
+    elements.push(makeElement('ground', snapPt.x, snapPt.y, snapPt.x, snapPt.y));
+    return;
+  }
+  if(currentTool==='probe'){
+    const snapPt = nearestExistingPoint(g.x,g.y) || g;
+    const el = makeElement('probe', snapPt.x, snapPt.y, snapPt.x, snapPt.y);
+    elements.push(el);
+    const color = PROBE_COLORS[scopeProbes.length % PROBE_COLORS.length];
+    const label = 'Sonda '+(scopeProbes.length+1)+' ('+snapPt.x+','+snapPt.y+')';
+    scopeProbes.push({id:uid(), elemId:el.id, color, label});
+    scopeData[scopeProbes[scopeProbes.length-1].id]=[];
+    refreshProbeList();
+    return;
+  }
+  // elementos de 2 terminales: iniciar arrastre
+  const snapPt = nearestExistingPoint(g.x,g.y) || g;
+  dragStart = snapPt;
+  dragEnd = snapPt;
+});
+
+canvas.addEventListener('mousemove',(e)=>{
+  if(moveDrag){
+    const g = getMouseGrid(e);
+    const dx = g.x-moveDrag.startX, dy = g.y-moveDrag.startY;
+    moveDrag.el.x1 = moveDrag.x1+dx; moveDrag.el.y1 = moveDrag.y1+dy;
+    moveDrag.el.x2 = moveDrag.x2+dx; moveDrag.el.y2 = moveDrag.y2+dy;
+    return;
+  }
+  if(!dragStart) return;
+  let g = getMouseGrid(e);
+  // permitir ortogonalidad fácil con shift
+  if(e.shiftKey){
+    if(Math.abs(g.x-dragStart.x) > Math.abs(g.y-dragStart.y)) g.y = dragStart.y;
+    else g.x = dragStart.x;
+  }
+  const snapPt = nearestExistingPoint(g.x,g.y);
+  dragEnd = snapPt || g;
+});
+
+canvas.addEventListener('mouseup', ()=>{
+  if(moveDrag){ moveDrag=null; return; }
+  if(!dragStart) return;
+  if(dragEnd && (dragStart.x!==dragEnd.x || dragStart.y!==dragEnd.y)){
+    const el = makeElement(currentTool, dragStart.x, dragStart.y, dragEnd.x, dragEnd.y);
+    elements.push(el);
+    selectElement(el);
+  }
+  dragStart=null; dragEnd=null;
+});
+canvas.addEventListener('mouseleave', ()=>{ dragStart=null; dragEnd=null; moveDrag=null; });
+canvas.addEventListener('contextmenu', (e)=>{ e.preventDefault(); dragStart=null; dragEnd=null; moveDrag=null; });
+
+document.addEventListener('keydown',(e)=>{
+  if((e.key==='Delete'||e.key==='Backspace') && selected && document.activeElement.tagName!=='INPUT'){
+    deleteSelected();
+  }
+  if(e.key==='Escape'){ dragStart=null; dragEnd=null; }
+});
+
+function selectElement(el){
+  if(selected) selected.selected=false;
+  selected = el||null;
+  if(selected) selected.selected=true;
+  renderProps();
+}
+function deleteSelected(){
+  if(!selected) return;
+  elements = elements.filter(e=>e!==selected);
+  scopeProbes = scopeProbes.filter(p=>{
+    if(p.elemId===selected.id){ delete scopeData[p.id]; return false; }
+    return true;
+  });
+  refreshProbeList();
+  selected=null;
+  renderProps();
+}
+
+//////////////////////// PANEL DE PROPIEDADES /////////////////////////////////
+const UNIT_LABEL = {resistor:'Ω',capacitor:'F',inductor:'H',potentiometer:'Ω',
+  dcsource:'V',acsource:'V (amplitud)',currentsource:'A',npn:'hFE',pnp:'hFE',
+  opamp:'ganancia A',nmos:'k (A/V²)',pmos:'k (A/V²)'};
+const NAME_LABEL = {resistor:'Resistencia',capacitor:'Condensador',inductor:'Bobina',
+  potentiometer:'Potenciómetro',dcsource:'Batería DC',acsource:'Fuente AC',
+  currentsource:'Fuente de corriente',diode:'Diodo',led:'LED',switch:'Interruptor',
+  wire:'Cable',ground:'Tierra',probe:'Sonda',npn:'Transistor NPN',pnp:'Transistor PNP',
+  opamp:'Amplificador operacional',nmos:'MOSFET canal N',pmos:'MOSFET canal P'};
+
+function renderProps(){
+  const body = document.getElementById('propsBody');
+  if(!selected){ body.innerHTML = '<div class="empty">Selecciona un componente para editarlo.</div>'; return; }
+  const el = selected;
+  let html = '<div style="margin-bottom:8px;font-weight:600;color:var(--accent)">'+ (NAME_LABEL[el.type]||el.type) +'</div>';
+  if(el.value!==null && el.value!==undefined){
+    html += '<label>Valor ('+(UNIT_LABEL[el.type]||'')+')</label><input type="number" id="valInput" step="any" value="'+el.value+'">';
+  }
+  if(el.type==='acsource'){
+    html += '<label>Frecuencia (Hz)</label><input type="number" id="freqInput" step="any" value="'+el.freq+'">';
+  }
+  if(el.type==='potentiometer'){
+    html += '<label>Posición cursor</label><input type="range" id="wiperInput" min="0" max="100" value="'+Math.round(el.wiper*100)+'">';
+  }
+  if(el.type==='switch'){
+    html += '<label>Estado</label><button class="btn" id="toggleSwitch" style="width:100%">'+(el.closed?'Cerrado (clic para abrir)':'Abierto (clic para cerrar)')+'</button>';
+  }
+  if(el.type==='nmos' || el.type==='pmos'){
+    html += '<label>Umbral Vth (V)</label><input type="number" id="vthInput" step="any" value="'+el.vth+'">';
+  }
+  if((el.type==='npn'||el.type==='pnp') && el._ic!==undefined){
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;line-height:1.6;">'+
+      'Ib = '+niceUnit(el._ib,'A')+'<br>Ic = '+niceUnit(el._ic,'A')+
+      '<br>Vce ≈ '+el._vce.toFixed(3)+' V</div>';
+  }
+  if((el.type==='nmos'||el.type==='pmos') && el._id!==undefined){
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;line-height:1.6;">'+
+      'Id = '+niceUnit(el._id,'A')+'<br>Vgs ≈ '+el._vgs.toFixed(3)+' V'+
+      '<br>Vds ≈ '+el._vds.toFixed(3)+' V</div>';
+  }
+  if(el.type==='opamp' && el._current!==undefined){
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">Iout ≈ '+niceUnit(el._current,'A')+'</div>';
+  }
+  if(el.type==='probe'){
+    const p = scopeProbes.find(p=>p.elemId===el.id);
+    if(p) html += '<label>Etiqueta (nodo)</label><input type="text" id="probeLabelInput" value="'+p.label.replace(/"/g,'&quot;')+'">';
+  }
+  html += '<button class="btn danger" id="delBtn" style="width:100%;margin-top:6px;">🗑 Eliminar</button>';
+  body.innerHTML = html;
+
+  const valInput = document.getElementById('valInput');
+  if(valInput) valInput.addEventListener('input', ()=>{ el.value = parseFloat(valInput.value)||0; });
+  const freqInput = document.getElementById('freqInput');
+  if(freqInput) freqInput.addEventListener('input', ()=>{ el.freq = parseFloat(freqInput.value)||0; });
+  const wiperInput = document.getElementById('wiperInput');
+  if(wiperInput) wiperInput.addEventListener('input', ()=>{ el.wiper = wiperInput.value/100; });
+  const vthInput = document.getElementById('vthInput');
+  if(vthInput) vthInput.addEventListener('input', ()=>{ el.vth = parseFloat(vthInput.value)||0.1; });
+  const toggleSwitch = document.getElementById('toggleSwitch');
+  if(toggleSwitch) toggleSwitch.addEventListener('click', ()=>{ el.closed=!el.closed; renderProps(); });
+  const probeLabelInput = document.getElementById('probeLabelInput');
+  if(probeLabelInput) probeLabelInput.addEventListener('input', ()=>{
+    const p = scopeProbes.find(p=>p.elemId===el.id);
+    if(p){ p.label = probeLabelInput.value || p.label; refreshProbeList(); }
+  });
+  document.getElementById('delBtn').addEventListener('click', deleteSelected);
+}
+
+//////////////////////// CONTROLES SUPERIORES //////////////////////////////////
+const playBtn = document.getElementById('playBtn');
+playBtn.addEventListener('click', ()=>{
+  running = !running;
+  playBtn.textContent = running? '⏸ Pausa' : '▶ Reanudar';
+});
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  simTime=0;
+  for(const el of elements){ el.state={vprev:0,iprev:0,vd:0.1}; }
+  for(const id in scopeData) scopeData[id]=[];
+});
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(!confirm('¿Vaciar todo el circuito?')) return;
+  elements=[]; scopeProbes=[]; scopeData={}; selected=null;
+  refreshProbeList(); renderProps(); simTime=0;
+});
+const speedSlider = document.getElementById('speedSlider');
+speedSlider.addEventListener('input', ()=>{
+  speedMultiplier = speedSlider.value/60;
+  document.getElementById('speedVal').textContent = speedMultiplier.toFixed(1)+'×';
+});
+document.getElementById('scopeClear').addEventListener('click', ()=>{
+  for(const id in scopeData) scopeData[id]=[];
+});
+
+// pestañas Osciloscopio / Bode
+document.querySelectorAll('.tabBtn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tabBtn').forEach(b=>{
+      b.classList.toggle('active', b===btn);
+      b.style.color = b===btn? 'var(--text)':'var(--dim)';
+      b.style.borderBottomColor = b===btn? 'var(--accent)':'transparent';
+    });
+    const isBode = btn.dataset.tab==='bode';
+    document.getElementById('scopePanel').style.display = isBode? 'none':'flex';
+    document.getElementById('bodePanel').style.display = isBode? 'flex':'none';
+    if(isBode){ populateBodeSelectors(); resizeBode(); drawBode(); }
+  });
+});
+document.getElementById('bodeRun').addEventListener('click', runBodeSweep);
+window.addEventListener('resize', resizeBode);
+
+// exportar / importar
+document.getElementById('exportBtn').addEventListener('click', exportCircuit);
+document.getElementById('importFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=> importCircuitFromText(reader.result);
+  reader.readAsText(file);
+  e.target.value='';
+});
+
+//////////////////////// CIRCUITO DE EJEMPLO INICIAL ///////////////////////////
+function loadDemo(){
+  // RC + LED con batería e interruptor, circuito serie simple con sondas
+  const b  = makeElement('dcsource', 100,120, 100,220); elements.push(b);
+  const w1 = makeElement('wire', 100,120, 260,120); elements.push(w1);
+  const sw = makeElement('switch', 260,120, 340,120); elements.push(sw);
+  const w2 = makeElement('wire', 340,120, 480,120); elements.push(w2);
+  const r  = makeElement('resistor', 480,120, 480,220); r.value=330; elements.push(r);
+  const w3 = makeElement('wire', 480,220, 480,260); elements.push(w3);
+  const led = makeElement('led', 480,260, 480,340); elements.push(led);
+  const w4 = makeElement('wire', 480,340, 100,340); elements.push(w4);
+  const w5 = makeElement('wire', 100,340, 100,220); elements.push(w5);
+  const gnd = makeElement('ground', 100,220,100,220); elements.push(gnd);
+
+  const c  = makeElement('capacitor', 640,120, 640,220); c.value=220e-6; elements.push(c);
+  const w6 = makeElement('wire', 480,120, 640,120); elements.push(w6);
+  const r2 = makeElement('resistor', 640,220,640,300); r2.value=2200; elements.push(r2);
+  const w7 = makeElement('wire', 640,300,100,300); elements.push(w7);
+
+  const p1 = makeElement('probe', 480,260,480,260); elements.push(p1);
+  const p2 = makeElement('probe', 640,220,640,220); elements.push(p2);
+  scopeProbes.push({id:uid(), elemId:p1.id, color:PROBE_COLORS[0], label:'V(LED)'});
+  scopeProbes.push({id:uid(), elemId:p2.id, color:PROBE_COLORS[1], label:'V(Cap)'});
+  scopeData[scopeProbes[0].id]=[]; scopeData[scopeProbes[1].id]=[];
+  refreshProbeList();
+}
+loadDemo();
+
+//////////////////////// ARRANQUE //////////////////////////////////////////////
+function initCanvasSize(){
+  resizeScope();
+  resizeBode();
+}
+window.addEventListener('load', initCanvasSize);
+initCanvasSize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
