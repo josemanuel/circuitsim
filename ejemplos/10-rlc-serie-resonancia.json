@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "nombre": "Circuito RLC serie (resonancia)",
+  "resumen": "L=10mH y C=100nF en serie con una fuente AC y una resistencia de 50Ω pegada a tierra (f0≈5.03kHz). La sonda mide la tensión sobre R directamente: verás un PICO de resonancia con el Bode, ya que la corriente (y por tanto V_R) se maximiza cuando las reactancias de L y C se cancelan.",
+  "elements": [
+    {
+      "id": "e1",
+      "type": "acsource",
+      "x1": 80,
+      "y1": 80,
+      "x2": 80,
+      "y2": 320,
+      "value": 5,
+      "freq": 5033,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e2",
+      "type": "ground",
+      "x1": 80,
+      "y1": 320,
+      "x2": 80,
+      "y2": 320,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e3",
+      "type": "inductor",
+      "x1": 80,
+      "y1": 80,
+      "x2": 300,
+      "y2": 80,
+      "value": 0.01,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e4",
+      "type": "capacitor",
+      "x1": 300,
+      "y1": 80,
+      "x2": 300,
+      "y2": 200,
+      "value": 1e-7,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e5",
+      "type": "resistor",
+      "x1": 300,
+      "y1": 200,
+      "x2": 300,
+      "y2": 320,
+      "value": 50,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e6",
+      "type": "wire",
+      "x1": 300,
+      "y1": 320,
+      "x2": 80,
+      "y2": 320,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e7",
+      "type": "probe",
+      "x1": 300,
+      "y1": 200,
+      "x2": 300,
+      "y2": 200,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e9",
+      "type": "probe",
+      "x1": 300,
+      "y1": 80,
+      "x2": 300,
+      "y2": 80,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    }
+  ],
+  "probes": [
+    {
+      "id": "e8",
+      "elemId": "e7",
+      "color": "#4fd1c5",
+      "label": "V(sobre R) — pico en resonancia"
+    },
+    {
+      "id": "e10",
+      "elemId": "e9",
+      "color": "#f6ad55",
+      "label": "V(entre L y C)"
+    }
+  ]
+}

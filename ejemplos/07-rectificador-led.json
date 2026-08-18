@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "nombre": "Rectificador de media onda con LED",
+  "resumen": "Fuente AC de 12V/60Hz, un LED en serie con una resistencia limitadora de 470Ω: el LED solo conduce en los semiciclos positivos, recortando la onda. Buen ejemplo del comportamiento no lineal del diodo.",
+  "elements": [
+    {
+      "id": "e1",
+      "type": "acsource",
+      "x1": 80,
+      "y1": 80,
+      "x2": 80,
+      "y2": 280,
+      "value": 12,
+      "freq": 60,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e2",
+      "type": "ground",
+      "x1": 80,
+      "y1": 280,
+      "x2": 80,
+      "y2": 280,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e3",
+      "type": "led",
+      "x1": 80,
+      "y1": 80,
+      "x2": 300,
+      "y2": 80,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e4",
+      "type": "resistor",
+      "x1": 300,
+      "y1": 80,
+      "x2": 300,
+      "y2": 280,
+      "value": 470,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e5",
+      "type": "wire",
+      "x1": 300,
+      "y1": 280,
+      "x2": 80,
+      "y2": 280,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e6",
+      "type": "probe",
+      "x1": 80,
+      "y1": 80,
+      "x2": 80,
+      "y2": 80,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e8",
+      "type": "probe",
+      "x1": 300,
+      "y1": 80,
+      "x2": 300,
+      "y2": 80,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    }
+  ],
+  "probes": [
+    {
+      "id": "e7",
+      "elemId": "e6",
+      "color": "#4fd1c5",
+      "label": "V(fuente)"
+    },
+    {
+      "id": "e9",
+      "elemId": "e8",
+      "color": "#f6ad55",
+      "label": "V(tras el LED)"
+    }
+  ]
+}

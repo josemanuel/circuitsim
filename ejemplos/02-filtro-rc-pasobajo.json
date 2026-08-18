@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "nombre": "Filtro RC paso-bajo",
+  "resumen": "Fuente AC a través de una resistencia de 1kΩ y un condensador de 100nF a tierra (fc≈1.6kHz). Prueba el análisis de Bode: verás la caída de -20dB/década y el giro de fase característico.",
+  "elements": [
+    {
+      "id": "e1",
+      "type": "acsource",
+      "x1": 100,
+      "y1": 120,
+      "x2": 100,
+      "y2": 260,
+      "value": 5,
+      "freq": 1000,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e2",
+      "type": "resistor",
+      "x1": 100,
+      "y1": 120,
+      "x2": 300,
+      "y2": 120,
+      "value": 1000,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e3",
+      "type": "capacitor",
+      "x1": 300,
+      "y1": 120,
+      "x2": 300,
+      "y2": 260,
+      "value": 1e-7,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e4",
+      "type": "wire",
+      "x1": 300,
+      "y1": 260,
+      "x2": 100,
+      "y2": 260,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e5",
+      "type": "ground",
+      "x1": 100,
+      "y1": 260,
+      "x2": 100,
+      "y2": 260,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e6",
+      "type": "probe",
+      "x1": 100,
+      "y1": 120,
+      "x2": 100,
+      "y2": 120,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e8",
+      "type": "probe",
+      "x1": 300,
+      "y1": 120,
+      "x2": 300,
+      "y2": 120,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    }
+  ],
+  "probes": [
+    {
+      "id": "e7",
+      "elemId": "e6",
+      "color": "#4fd1c5",
+      "label": "V(entrada)"
+    },
+    {
+      "id": "e9",
+      "elemId": "e8",
+      "color": "#f6ad55",
+      "label": "V(salida filtro)"
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "nombre": "Regulador de tensión con diodo Zener",
+  "resumen": "Fuente de 12V, resistencia serie de 470Ω y zener de 5.1V: el nodo regulado se mantiene cerca de 5.1V incluso si la entrada varía. Prueba a cambiar Vin y observa la regulación.",
+  "elements": [
+    {
+      "id": "e1",
+      "type": "dcsource",
+      "x1": 100,
+      "y1": 60,
+      "x2": 100,
+      "y2": 300,
+      "value": 12,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e2",
+      "type": "resistor",
+      "x1": 100,
+      "y1": 60,
+      "x2": 300,
+      "y2": 60,
+      "value": 470,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e3",
+      "type": "zener",
+      "x1": 300,
+      "y1": 300,
+      "x2": 300,
+      "y2": 60,
+      "value": 5.1,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e4",
+      "type": "wire",
+      "x1": 300,
+      "y1": 300,
+      "x2": 100,
+      "y2": 300,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e5",
+      "type": "ground",
+      "x1": 100,
+      "y1": 300,
+      "x2": 100,
+      "y2": 300,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e6",
+      "type": "probe",
+      "x1": 300,
+      "y1": 60,
+      "x2": 300,
+      "y2": 60,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    }
+  ],
+  "probes": [
+    {
+      "id": "e7",
+      "elemId": "e6",
+      "color": "#4fd1c5",
+      "label": "V(regulado)"
+    }
+  ]
+}

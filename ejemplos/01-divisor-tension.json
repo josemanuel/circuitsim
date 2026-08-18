@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "nombre": "Divisor de tensión resistivo",
+  "resumen": "Dos resistencias en serie con una batería de 9V: el punto medio queda a la mitad de la tensión. Circuito introductorio a las leyes de Kirchhoff.",
+  "elements": [
+    {
+      "id": "e1",
+      "type": "dcsource",
+      "x1": 100,
+      "y1": 80,
+      "x2": 100,
+      "y2": 260,
+      "value": 9,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e2",
+      "type": "resistor",
+      "x1": 100,
+      "y1": 80,
+      "x2": 300,
+      "y2": 80,
+      "value": 2200,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e3",
+      "type": "resistor",
+      "x1": 300,
+      "y1": 80,
+      "x2": 300,
+      "y2": 260,
+      "value": 2200,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e4",
+      "type": "wire",
+      "x1": 300,
+      "y1": 260,
+      "x2": 100,
+      "y2": 260,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e5",
+      "type": "ground",
+      "x1": 100,
+      "y1": 260,
+      "x2": 100,
+      "y2": 260,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e6",
+      "type": "probe",
+      "x1": 300,
+      "y1": 80,
+      "x2": 300,
+      "y2": 80,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e8",
+      "type": "probe",
+      "x1": 100,
+      "y1": 80,
+      "x2": 100,
+      "y2": 80,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    }
+  ],
+  "probes": [
+    {
+      "id": "e7",
+      "elemId": "e6",
+      "color": "#4fd1c5",
+      "label": "V(punto medio)"
+    },
+    {
+      "id": "e9",
+      "elemId": "e8",
+      "color": "#f6ad55",
+      "label": "V(batería +)"
+    }
+  ]
+}

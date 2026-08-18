@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "nombre": "Comparador op-amp saturado a los rieles",
+  "resumen": "Op-amp en lazo abierto (sin realimentación) con una fuente AC de solo 0.5V en la entrada y riel de ±12V: la ganancia de 100000 hace que la salida se convierta en una onda casi cuadrada, saturada al riel positivo o negativo según el signo de la entrada.",
+  "elements": [
+    {
+      "id": "e1",
+      "type": "acsource",
+      "x1": 80,
+      "y1": 60,
+      "x2": 80,
+      "y2": 220,
+      "value": 0.5,
+      "freq": 100,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e2",
+      "type": "ground",
+      "x1": 80,
+      "y1": 220,
+      "x2": 80,
+      "y2": 220,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e3",
+      "type": "ground",
+      "x1": 240,
+      "y1": 220,
+      "x2": 240,
+      "y2": 220,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e4",
+      "type": "opamp",
+      "x1": 340,
+      "y1": 140,
+      "x2": 480,
+      "y2": 140,
+      "value": 100000,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": 12
+    },
+    {
+      "id": "e5",
+      "type": "wire",
+      "x1": 80,
+      "y1": 60,
+      "x2": 340,
+      "y2": 98,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e6",
+      "type": "wire",
+      "x1": 240,
+      "y1": 220,
+      "x2": 340,
+      "y2": 182,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e7",
+      "type": "probe",
+      "x1": 340,
+      "y1": 98,
+      "x2": 340,
+      "y2": 98,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e9",
+      "type": "probe",
+      "x1": 480,
+      "y1": 140,
+      "x2": 480,
+      "y2": 140,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    }
+  ],
+  "probes": [
+    {
+      "id": "e8",
+      "elemId": "e7",
+      "color": "#4fd1c5",
+      "label": "V(entrada)"
+    },
+    {
+      "id": "e10",
+      "elemId": "e9",
+      "color": "#f6ad55",
+      "label": "V(salida saturada)"
+    }
+  ]
+}

@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "nombre": "Amplificador NPN en emisor común",
+  "resumen": "Transistor 2N2222-like polarizado con Rb=470kΩ y Rc=1kΩ desde una fuente de 10V. Punto de operación validado analíticamente: Ic≈2mA, Vce≈8V.",
+  "elements": [
+    {
+      "id": "e1",
+      "type": "dcsource",
+      "x1": 100,
+      "y1": 60,
+      "x2": 100,
+      "y2": 320,
+      "value": 10,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e2",
+      "type": "npn",
+      "x1": 340,
+      "y1": 180,
+      "x2": 440,
+      "y2": 180,
+      "value": 100,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e3",
+      "type": "resistor",
+      "x1": 100,
+      "y1": 60,
+      "x2": 340,
+      "y2": 180,
+      "value": 470000,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e4",
+      "type": "resistor",
+      "x1": 100,
+      "y1": 60,
+      "x2": 440,
+      "y2": 140,
+      "value": 1000,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e5",
+      "type": "wire",
+      "x1": 440,
+      "y1": 220,
+      "x2": 100,
+      "y2": 320,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e6",
+      "type": "ground",
+      "x1": 100,
+      "y1": 320,
+      "x2": 100,
+      "y2": 320,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e7",
+      "type": "probe",
+      "x1": 440,
+      "y1": 140,
+      "x2": 440,
+      "y2": 140,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    },
+    {
+      "id": "e9",
+      "type": "probe",
+      "x1": 340,
+      "y1": 180,
+      "x2": 340,
+      "y2": 180,
+      "value": null,
+      "freq": null,
+      "phase": 0,
+      "wiper": 0.5,
+      "closed": true,
+      "vth": null,
+      "rail": null
+    }
+  ],
+  "probes": [
+    {
+      "id": "e8",
+      "elemId": "e7",
+      "color": "#4fd1c5",
+      "label": "V(colector)"
+    },
+    {
+      "id": "e10",
+      "elemId": "e9",
+      "color": "#f6ad55",
+      "label": "V(base)"
+    }
+  ]
+}
