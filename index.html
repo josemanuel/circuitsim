@@ -93,6 +93,7 @@
     <div class="sep"></div>
     <button class="btn" id="exportBtn">💾 Exportar</button>
     <label class="btn" style="cursor:pointer;margin:0;">📂 Importar<input type="file" id="importFile" accept="application/json" style="display:none"></label>
+    <button class="btn" id="libraryBtn">📚 Biblioteca</button>
     <div style="flex:1"></div>
     <span id="statusMsg" style="font-size:12px;color:var(--dim)"></span>
   </header>
@@ -115,12 +116,14 @@
       <h2>Semiconductores</h2>
       <button class="comp-btn" data-tool="diode">▷| Diodo</button>
       <button class="comp-btn" data-tool="led">☀ LED</button>
+      <button class="comp-btn" data-tool="zener">▷|| Zener</button>
       <button class="comp-btn" data-tool="npn">🔺 Transistor NPN</button>
       <button class="comp-btn" data-tool="pnp">🔻 Transistor PNP</button>
       <button class="comp-btn" data-tool="nmos">⏫ MOSFET NMOS</button>
       <button class="comp-btn" data-tool="pmos">⏬ MOSFET PMOS</button>
       <h2>Activos</h2>
       <button class="comp-btn" data-tool="opamp">▷ Amp. Operacional</button>
+      <button class="comp-btn" data-tool="transformer">⊃⊂ Transformador</button>
       <h2>Otros</h2>
       <button class="comp-btn" data-tool="switch">⏻ Interruptor</button>
       <button class="comp-btn" data-tool="probe">📍 Sonda (Osc.)</button>
@@ -175,6 +178,21 @@
       </div>
     </div>
   </main>
+
+  <div id="libraryOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);
+      z-index:50;align-items:center;justify-content:center;">
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;
+        width:min(640px,92vw);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
+          border-bottom:1px solid var(--border);">
+        <h2 style="margin:0;font-size:15px;color:var(--accent);">📚 Biblioteca de ejemplos</h2>
+        <button class="btn" id="libraryCloseBtn" style="padding:4px 10px;">✕</button>
+      </div>
+      <div id="libraryBody" style="overflow-y:auto;padding:14px 18px;font-size:13px;">
+        <div class="empty" style="color:var(--dim)">Cargando…</div>
+      </div>
+    </div>
+  </div>
 
   <footer>
     <span id="hint">Elige una herramienta y arrastra sobre el lienzo para colocar un componente.</span>
@@ -231,11 +249,14 @@ function defaultValue(type){
     case 'npn': case 'pnp': return 100;     // hFE (beta forward)
     case 'opamp': return 100000;            // ganancia en lazo abierto (A)
     case 'nmos': case 'pmos': return 2e-3;  // k (parámetro de transconductancia, A/V²)
+    case 'zener': return 5.1;               // Vz, tensión de ruptura
+    case 'transformer': return 1;           // relación de vueltas n = Ns/Np
     default: return null;
   }
 }
 function defaultFreq(type){ return type==='acsource' ? 60 : null; }
 function defaultVth(type){ return (type==='nmos'||type==='pmos') ? 2 : null; } // V, umbral
+function defaultRail(type){ return type==='opamp' ? 15 : null; }             // V, riel de alimentación (±)
 
 function makeElement(type, x1,y1,x2,y2){
   const el = {
@@ -243,11 +264,12 @@ function makeElement(type, x1,y1,x2,y2){
     value: defaultValue(type),
     freq: defaultFreq(type),
     vth: defaultVth(type),
+    rail: defaultRail(type),
     phase: 0,
     wiper: 0.5, // para potenciómetro
     closed: true, // para interruptor
-    // vd: diodo/LED · vbe/vbc: BJT · vgs/vds: MOSFET (guess de Newton, punto de operación)
-    state: { vprev:0, iprev:0, vd:0.1, vbe:0.6, vbc:-0.1, vgs:0, vds:0.1 },
+    // vd: diodo/LED/zener · vbe/vbc: BJT · vgs/vds: MOSFET · vout: opamp (saturación a rieles)
+    state: { vprev:0, iprev:0, vd:0.1, vbe:0.6, vbc:-0.1, vgs:0, vds:0.1, vout:0 },
     vsrcIndex: -1,
     selected:false
   };
@@ -291,6 +313,17 @@ function pins(el){
     const cos=Math.cos(ang), sin=Math.sin(ang);
     const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
     return [rot(0,-L*0.3), rot(0,L*0.3), rot(L,0)];
+  }
+  if(el.type==='transformer'){
+    // orden: [primario+, primario-, secundario+, secundario-]. El arrastre define
+    // la separación horizontal entre bobinados; la separación vertical (devanado)
+    // es fija para que el símbolo no se deforme.
+    let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<60) L=60;
+    const H = 60;
+    const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
+    return [rot(0,0), rot(0,H), rot(L,0), rot(L,H)];
   }
   return [{x:el.x1,y:el.y1},{x:el.x2,y:el.y2}];
 }
@@ -344,7 +377,7 @@ function buildTopology(){
   }
   const nodeCount = nextNode-1;
   // fuentes de tensión y op-amps necesitan una incógnita extra (corriente de rama)
-  const vsrcElems = elements.filter(e=>e.type==='dcsource'||e.type==='acsource'||e.type==='opamp');
+  const vsrcElems = elements.filter(e=>e.type==='dcsource'||e.type==='acsource'||e.type==='opamp'||e.type==='transformer');
   vsrcElems.forEach((e,i)=> e.vsrcIndex = i);
   return {nodeOf, elNodes, nodeCount, vsrcElems, dsu};
 }
@@ -433,6 +466,13 @@ function buildComplexMNA(topo, stimulusEl, w){
     if(vp) A[row][vp-1]=A[row][vp-1].sub(gain);
     if(vn) A[row][vn-1]=A[row][vn-1].add(gain);
   }
+  function stampTransformer(p1,p2,s1,s2,idx,a){ // a: Cx
+    const row = nodeCount+idx;
+    if(p1){ A[p1-1][row]=A[p1-1][row].add(new Cx(1,0)); A[row][p1-1]=A[row][p1-1].add(new Cx(1,0)); }
+    if(p2){ A[p2-1][row]=A[p2-1][row].sub(new Cx(1,0)); A[row][p2-1]=A[row][p2-1].sub(new Cx(1,0)); }
+    if(s1){ A[s1-1][row]=A[s1-1][row].sub(a); A[row][s1-1]=A[row][s1-1].sub(a); }
+    if(s2){ A[s2-1][row]=A[s2-1][row].add(a); A[row][s2-1]=A[row][s2-1].add(a); }
+  }
   for(const el of elements){
     if(el.type==='wire'||el.type==='ground'||el.type==='probe') continue;
     const ns = elNodes[el.id];
@@ -450,7 +490,7 @@ function buildComplexMNA(topo, stimulusEl, w){
       case 'diode': case 'led': {
         const Is = el.type==='led'?1e-15:1e-12;
         const Vt = el.type==='led'?0.052:0.026;
-        const vd = Math.max(Math.min(el.state.vd,1.5),-5);
+        const vd = Math.max(Math.min(el.state.vd,3.0),-5);
         const g = Math.max(Is/Vt*Math.exp(Math.min(vd/Vt,40)), 1e-12);
         stampG(ns[0],ns[1], new Cx(g,0));
         break;
@@ -502,6 +542,21 @@ function buildComplexMNA(topo, stimulusEl, w){
         const gControl_p = nmos?ng:nsrc, gControl_n = nmos?nsrc:ng;
         stampG(deff,seff, new Cx(gds,0));
         stampVCCS(deff,seff, gControl_p,gControl_n, new Cx(gm,0));
+        break;
+      }
+      case 'zener': {
+        const Is=1e-12, Vt=0.026, Vz=Math.max(el.value,0.1);
+        const Isz=1e-9, Vtz=0.005;
+        const vd = Math.max(Math.min(el.state.vd,3.0), -(Vz+2));
+        const ex1=Math.exp(Math.min(vd/Vt,40)), ex2=Math.exp(Math.min(-(vd+Vz)/Vtz,60));
+        const g = Math.max(Is/Vt*ex1 + Isz/Vtz*ex2, 1e-14);
+        stampG(ns[0],ns[1], new Cx(g,0));
+        break;
+      }
+      case 'transformer': {
+        const [p1,p2,s1,s2] = ns;
+        const n = Math.max(el.value,1e-6), a = 1/n;
+        stampTransformer(p1,p2,s1,s2, el.vsrcIndex, new Cx(a,0));
         break;
       }
     }
@@ -615,7 +670,7 @@ function serializeCircuit(){
   return JSON.stringify({
     version:1,
     elements: elements.map(e=>({id:e.id,type:e.type,x1:e.x1,y1:e.y1,x2:e.x2,y2:e.y2,
-      value:e.value, freq:e.freq, phase:e.phase, wiper:e.wiper, closed:e.closed, vth:e.vth})),
+      value:e.value, freq:e.freq, phase:e.phase, wiper:e.wiper, closed:e.closed, vth:e.vth, rail:e.rail})),
     probes: scopeProbes.map(p=>({id:p.id, elemId:p.elemId, color:p.color, label:p.label}))
   }, null, 2);
 }
@@ -634,9 +689,10 @@ function importCircuitFromText(text){
   elements = obj.elements.map(e=>({
     id: e.id || uid(), type:e.type, x1:e.x1,y1:e.y1,x2:e.x2,y2:e.y2,
     value: e.value, freq: e.freq, phase: e.phase||0, vth: (e.vth!==undefined? e.vth:defaultVth(e.type)),
+    rail: (e.rail!==undefined? e.rail:defaultRail(e.type)),
     wiper: e.wiper!==undefined? e.wiper:0.5,
     closed: e.closed!==undefined? e.closed:true,
-    state:{vprev:0,iprev:0,vd:0.1,vbe:0.6,vbc:-0.1,vgs:0,vds:0.1}, vsrcIndex:-1, selected:false
+    state:{vprev:0,iprev:0,vd:0.1,vbe:0.6,vbc:-0.1,vgs:0,vds:0.1,vout:0}, vsrcIndex:-1, selected:false
   }));
   let maxN=0;
   for(const e of elements){ const m=/^e(\d+)$/.exec(e.id); if(m) maxN=Math.max(maxN, parseInt(m[1])); }
@@ -659,8 +715,8 @@ function stepSimulation(dt){
 
   // hasta 8 iteraciones de Newton por la no-linealidad de diodos/LED/transistores
   let nodeVoltages = new Array(matSize).fill(0);
-  const nonlinear = elements.filter(e=>e.type==='diode'||e.type==='led'||e.type==='npn'||e.type==='pnp'||e.type==='nmos'||e.type==='pmos');
-  const iters = nonlinear.length? 8 : 1;
+  const nonlinear = elements.filter(e=>e.type==='diode'||e.type==='led'||e.type==='npn'||e.type==='pnp'||e.type==='nmos'||e.type==='pmos'||e.type==='zener'||e.type==='opamp');
+  const iters = nonlinear.length? 20 : 1;
 
   for(let it=0; it<iters; it++){
     const A = Array.from({length:matSize},()=>new Array(matSize).fill(0));
@@ -696,6 +752,22 @@ function stepSimulation(dt){
       if(nout){ A[nout-1][row]+=1; A[row][nout-1]+=1; }
       if(vp) A[row][vp-1] -= gain;
       if(vn) A[row][vn-1] += gain;
+    }
+    // fija la salida del op-amp a un valor constante (saturación a un riel)
+    function stampFixedOut(nout,idx,val){
+      const row = nodeCount+idx;
+      if(nout){ A[nout-1][row]+=1; A[row][nout-1]+=1; }
+      rhs[row]+=val;
+    }
+    // transformador ideal (relación de vueltas a=Np/Ns): V(p1)-V(p2)=a*(V(s1)-V(s2)),
+    // con la corriente de rama I acoplada a ambos devanados (estampado simétrico,
+    // válido porque el transformador ideal es un elemento recíproco sin pérdidas).
+    function stampTransformer(p1,p2,s1,s2,idx,a){
+      const row = nodeCount+idx;
+      if(p1){ A[p1-1][row]+=1; A[row][p1-1]+=1; }
+      if(p2){ A[p2-1][row]-=1; A[row][p2-1]-=1; }
+      if(s1){ A[s1-1][row]-=a; A[row][s1-1]-=a; }
+      if(s2){ A[s2-1][row]+=a; A[row][s2-1]+=a; }
     }
 
     for(const el of elements){
@@ -752,7 +824,7 @@ function stepSimulation(dt){
           const Is = el.type==='led' ? 1e-15 : 1e-12;
           const Vt = el.type==='led' ? 0.052 : 0.026; // ideality*Vt aproximado para simular Vf mayor en LED
           let vd = el.state.vd;
-          vd = Math.max(Math.min(vd, 1.5), -5);
+          vd = Math.max(Math.min(vd, 3.0), -5);
           const ex = Math.exp(Math.min(vd/Vt, 40));
           const Id = Is*(ex-1);
           const Geq = Math.max(Is/Vt*ex, 1e-12);
@@ -794,10 +866,16 @@ function stepSimulation(dt){
           break;
         }
         case 'opamp': {
-          // pines: [entrada+, entrada-, salida]. Vout = A*(Vp-Vn), lineal, sin
-          // necesidad de iteración de Newton.
+          // pines: [entrada+, entrada-, salida]. Vout = A*(Vp-Vn) mientras no se
+          // sature; si la estimación previa alcanza el riel, se fija Vout=±riel
+          // (voltaje constante) y se refina con Newton hasta converger en el modo correcto.
           const [vp,vn,vout] = ns;
-          stampVCVSout(vout, vp, vn, el.vsrcIndex, Math.max(el.value,1));
+          const rail = Math.max(el.rail!==undefined? el.rail:15, 0.05);
+          const gain = Math.max(el.value,1);
+          const prevOut = el.state.vout||0;
+          if(prevOut >= rail-1e-9) stampFixedOut(vout, el.vsrcIndex, rail);
+          else if(prevOut <= -rail+1e-9) stampFixedOut(vout, el.vsrcIndex, -rail);
+          else stampVCVSout(vout, vp, vn, el.vsrcIndex, gain);
           break;
         }
         case 'nmos': case 'pmos': {
@@ -834,18 +912,45 @@ function stepSimulation(dt){
           stampI(deff,seff, IeqMos);
           break;
         }
+        case 'zener': {
+          // diodo normal en directa + rama de ruptura inversa mucho más abrupta
+          // (Vtz pequeño → codo ajustado cerca de -Vz, como un zener real):
+          // I(V) = Is*(e^(V/Vt)-1) - Isz*(e^(-(V+Vz)/Vtz)-1)
+          const Is = 1e-12, Vt = 0.026, Vz = Math.max(el.value, 0.1);
+          const Isz = 1e-9, Vtz = 0.005;
+          let vd = Math.max(Math.min(el.state.vd, 1.5), -(Vz+2));
+          const ex1 = Math.exp(Math.min(vd/Vt, 40));
+          const ex2 = Math.exp(Math.min(-(vd+Vz)/Vtz, 60));
+          const I0 = Is*(ex1-1) - Isz*(ex2-1);
+          const G = Math.max(Is/Vt*ex1 + Isz/Vtz*ex2, 1e-14);
+          const Ieq = I0 - G*vd;
+          stampG(ns[0],ns[1], G); stampI(ns[0],ns[1], Ieq);
+          break;
+        }
+        case 'transformer': {
+          // pines: [primario+, primario-, secundario+, secundario-]
+          const [p1,p2,s1,s2] = ns;
+          const n = Math.max(el.value, 1e-6); // n = Ns/Np
+          const a = 1/n;
+          stampTransformer(p1,p2,s1,s2, el.vsrcIndex, a);
+          break;
+        }
       }
     }
 
     nodeVoltages = solveLinear(A, rhs);
 
-    // actualizar el punto de operación de diodos/LED/transistores (Newton)
+    // actualizar el punto de operación de diodos/LED/zener/transistores/op-amp (Newton)
     for(const el of elements){
-      if(el.type==='diode' || el.type==='led'){
+      if(el.type==='diode' || el.type==='led' || el.type==='zener'){
         const ns = elNodes[el.id];
         const v1 = ns[0]? nodeVoltages[ns[0]-1] : 0;
         const v2 = ns[1]? nodeVoltages[ns[1]-1] : 0;
-        el.state.vd = v1-v2;
+        const raw = v1-v2, old = el.state.vd;
+        // limitador de tensión de unión (estilo SPICE): solo se acota el paso HACIA
+        // ARRIBA (entrada en conducción), donde la exponencial es más pronunciada;
+        // bajar de tensión (zona inversa) es seguro y no necesita limitarse.
+        el.state.vd = (raw > old+0.3) ? old+0.3 : raw;
       } else if(el.type==='npn' || el.type==='pnp'){
         const [nb,ncN,ne] = elNodes[el.id];
         const Vb=nb?nodeVoltages[nb-1]:0, Vc=ncN?nodeVoltages[ncN-1]:0, Ve=ne?nodeVoltages[ne-1]:0;
@@ -858,6 +963,9 @@ function stepSimulation(dt){
         const sign = el.type==='nmos'?1:-1;
         el.state.vgs = sign*(Vg-Vs);
         el.state.vds = sign*(Vd-Vs);
+      } else if(el.type==='opamp'){
+        const [,,voutN] = elNodes[el.id];
+        el.state.vout = voutN? nodeVoltages[voutN-1] : 0;
       }
     }
   }
@@ -887,7 +995,8 @@ function stepSimulation(dt){
       case 'diode': case 'led': {
         const Is = el.type==='led'?1e-15:1e-12;
         const Vt = el.type==='led'?0.052:0.026;
-        el._current = Is*(Math.exp(Math.min(el._vdrop/Vt,40))-1);
+        const vdc = Math.max(Math.min(el._vdrop, 3.0), -5); // mismo límite que en el estampado, para consistencia
+        el._current = Is*(Math.exp(Math.min(vdc/Vt,40))-1);
         break;
       }
       case 'dcsource': case 'acsource': {
@@ -926,6 +1035,19 @@ function stepSimulation(dt){
           Id = vds<vov ? k*(vov*vds-0.5*vds*vds) : 0.5*k*vov*vov*(1+lambda*(vds-vov));
         }
         el._id=Id; el._vgs=vgs; el._vds=vds; el._current=Id;
+        break;
+      }
+      case 'zener': {
+        const Is=1e-12, Vt=0.026, Vz=Math.max(el.value,0.1);
+        const Isz=1e-9, Vtz=0.005;
+        const vd = Math.max(Math.min(el._vdrop,3.0), -(Vz+2)); // mismo límite que en el estampado
+        const ex1=Math.exp(Math.min(vd/Vt,40)), ex2=Math.exp(Math.min(-(vd+Vz)/Vtz,60));
+        el._current = Is*(ex1-1) - Isz*(ex2-1);
+        break;
+      }
+      case 'transformer': {
+        const idx = nodeCount + el.vsrcIndex;
+        el._current = nodeVoltages[idx] || 0; // corriente del devanado primario
         break;
       }
       default: el._current = 0;
@@ -1180,6 +1302,19 @@ function drawElement(el){
       labelValue(el, (el._current!==undefined? niceUnit(el._current,'A'):''));
       break;
     }
+    case 'zener': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath();
+        ctx.moveTo(-8,-9); ctx.lineTo(-8,9); ctx.lineTo(8,0); ctx.closePath();
+        ctx.fill();
+        // barra de cátodo con las "alas" características del zener
+        ctx.beginPath();
+        ctx.moveTo(3,-9); ctx.lineTo(8,-9); ctx.lineTo(8,9); ctx.lineTo(13,9);
+        ctx.stroke();
+      });
+      labelValue(el, 'Vz='+el.value+'V'+(el._current!==undefined? '  '+niceUnit(el._current,'A'):''));
+      break;
+    }
     case 'led': {
       const glow = el._current && el._current>0.0005;
       drawTwoTerminal(el,(len,bh)=>{
@@ -1298,6 +1433,48 @@ function drawElement(el){
       drawPin(vp.x,vp.y); drawPin(vn.x,vn.y); drawPin(vout.x,vout.y);
       const cx3=(vp.x+vn.x)/2, cy3=(vp.y+vn.y)/2;
       labelAt(cx3-10, cy3-L*0.5-6, 'A='+niceUnit(el.value,''));
+      break;
+    }
+    case 'transformer': {
+      const [p1,p2,s1,s2] = pins(el);
+      let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<60) L=60;
+      const H = 60;
+      const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+      ctx.save();
+      ctx.translate(el.x1,el.y1);
+      ctx.rotate(ang);
+      ctx.strokeStyle = el.selected? '#4fd1c5' : '#c9d3de';
+      ctx.lineWidth = el.selected? 2.5 : 2;
+      // devanado primario (izquierda): bobina vertical de pequeños arcos
+      function coil(x, dir){
+        ctx.beginPath();
+        const loops=4, seg=H/loops, r=seg/2;
+        let y=0;
+        for(let i=0;i<loops;i++){
+          ctx.moveTo(x,y);
+          ctx.arc(x, y+r, r, -Math.PI/2*dir, Math.PI/2*dir, dir<0);
+          y+=seg;
+        }
+        ctx.stroke();
+      }
+      coil(L*0.42, 1);
+      coil(L*0.58, -1);
+      // núcleo (dos líneas verticales entre los devanados)
+      ctx.beginPath();
+      ctx.moveTo(L*0.48,-4); ctx.lineTo(L*0.48,H+4);
+      ctx.moveTo(L*0.52,-4); ctx.lineTo(L*0.52,H+4);
+      ctx.stroke();
+      // patillas rectas hasta cada devanado
+      ctx.beginPath();
+      ctx.moveTo(0,0); ctx.lineTo(L*0.42,0);
+      ctx.moveTo(0,H); ctx.lineTo(L*0.42,H);
+      ctx.moveTo(L,0); ctx.lineTo(L*0.58,0);
+      ctx.moveTo(L,H); ctx.lineTo(L*0.58,H);
+      ctx.stroke();
+      ctx.restore();
+      drawPin(p1.x,p1.y); drawPin(p2.x,p2.y); drawPin(s1.x,s1.y); drawPin(s2.x,s2.y);
+      const cx4=(p1.x+s1.x)/2, cy4=(p1.y+s1.y)/2;
+      labelAt(cx4, cy4-14, 'n='+niceUnit(el.value,''));
       break;
     }
   }
@@ -1585,12 +1762,13 @@ function deleteSelected(){
 //////////////////////// PANEL DE PROPIEDADES /////////////////////////////////
 const UNIT_LABEL = {resistor:'Ω',capacitor:'F',inductor:'H',potentiometer:'Ω',
   dcsource:'V',acsource:'V (amplitud)',currentsource:'A',npn:'hFE',pnp:'hFE',
-  opamp:'ganancia A',nmos:'k (A/V²)',pmos:'k (A/V²)'};
+  opamp:'ganancia A',nmos:'k (A/V²)',pmos:'k (A/V²)',zener:'V (Vz)',transformer:'n = Ns/Np'};
 const NAME_LABEL = {resistor:'Resistencia',capacitor:'Condensador',inductor:'Bobina',
   potentiometer:'Potenciómetro',dcsource:'Batería DC',acsource:'Fuente AC',
   currentsource:'Fuente de corriente',diode:'Diodo',led:'LED',switch:'Interruptor',
   wire:'Cable',ground:'Tierra',probe:'Sonda',npn:'Transistor NPN',pnp:'Transistor PNP',
-  opamp:'Amplificador operacional',nmos:'MOSFET canal N',pmos:'MOSFET canal P'};
+  opamp:'Amplificador operacional',nmos:'MOSFET canal N',pmos:'MOSFET canal P',
+  zener:'Diodo Zener',transformer:'Transformador ideal'};
 
 function renderProps(){
   const body = document.getElementById('propsBody');
@@ -1612,6 +1790,9 @@ function renderProps(){
   if(el.type==='nmos' || el.type==='pmos'){
     html += '<label>Umbral Vth (V)</label><input type="number" id="vthInput" step="any" value="'+el.vth+'">';
   }
+  if(el.type==='opamp'){
+    html += '<label>Riel de alimentación ±V</label><input type="number" id="railInput" step="any" value="'+el.rail+'">';
+  }
   if((el.type==='npn'||el.type==='pnp') && el._ic!==undefined){
     html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;line-height:1.6;">'+
       'Ib = '+niceUnit(el._ib,'A')+'<br>Ic = '+niceUnit(el._ic,'A')+
@@ -1623,7 +1804,12 @@ function renderProps(){
       '<br>Vds ≈ '+el._vds.toFixed(3)+' V</div>';
   }
   if(el.type==='opamp' && el._current!==undefined){
-    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">Iout ≈ '+niceUnit(el._current,'A')+'</div>';
+    const sat = Math.abs(el.state.vout)>=(el.rail-1e-6);
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">Iout ≈ '+niceUnit(el._current,'A')+
+      (sat? '<br><span style="color:var(--accent2)">⚠ saturado al riel</span>':'')+'</div>';
+  }
+  if(el.type==='transformer' && el._current!==undefined){
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">I primario ≈ '+niceUnit(el._current,'A')+'</div>';
   }
   if(el.type==='probe'){
     const p = scopeProbes.find(p=>p.elemId===el.id);
@@ -1640,6 +1826,8 @@ function renderProps(){
   if(wiperInput) wiperInput.addEventListener('input', ()=>{ el.wiper = wiperInput.value/100; });
   const vthInput = document.getElementById('vthInput');
   if(vthInput) vthInput.addEventListener('input', ()=>{ el.vth = parseFloat(vthInput.value)||0.1; });
+  const railInput = document.getElementById('railInput');
+  if(railInput) railInput.addEventListener('input', ()=>{ el.rail = Math.max(parseFloat(railInput.value)||0.1, 0.1); });
   const toggleSwitch = document.getElementById('toggleSwitch');
   if(toggleSwitch) toggleSwitch.addEventListener('click', ()=>{ el.closed=!el.closed; renderProps(); });
   const probeLabelInput = document.getElementById('probeLabelInput');
@@ -1658,7 +1846,7 @@ playBtn.addEventListener('click', ()=>{
 });
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   simTime=0;
-  for(const el of elements){ el.state={vprev:0,iprev:0,vd:0.1}; }
+  for(const el of elements){ el.state={vprev:0,iprev:0,vd:0.1,vbe:0.6,vbc:-0.1,vgs:0,vds:0.1,vout:0}; }
   for(const id in scopeData) scopeData[id]=[];
 });
 document.getElementById('clearBtn').addEventListener('click', ()=>{
@@ -1701,6 +1889,71 @@ document.getElementById('importFile').addEventListener('change', (e)=>{
   reader.onload = ()=> importCircuitFromText(reader.result);
   reader.readAsText(file);
   e.target.value='';
+});
+
+//////////////////////// BIBLIOTECA DE EJEMPLOS ///////////////////////////////
+// Lee ejemplos/manifest.json (un array con los nombres de archivo .json de la
+// carpeta "ejemplos" en la raíz de la app) y, para cada uno, el propio archivo
+// para mostrar su nombre y resumen. Requiere servir la app por HTTP (no funciona
+// abriendo el HTML directamente como archivo local, por restricciones CORS).
+const libraryCache = {};
+async function loadLibrary(){
+  const body = document.getElementById('libraryBody');
+  body.innerHTML = '<div style="color:var(--dim)">Cargando…</div>';
+  try{
+    const manifestRes = await fetch('ejemplos/manifest.json');
+    if(!manifestRes.ok) throw new Error('manifest.json no encontrado (HTTP '+manifestRes.status+')');
+    const filenames = await manifestRes.json();
+    if(!Array.isArray(filenames) || filenames.length===0){
+      body.innerHTML = '<div style="color:var(--dim)">La carpeta ejemplos/ no contiene circuitos listados en manifest.json.</div>';
+      return;
+    }
+    const entries = [];
+    for(const fname of filenames){
+      try{
+        const res = await fetch('ejemplos/'+fname);
+        if(!res.ok) continue;
+        const obj = await res.json();
+        libraryCache[fname] = obj;
+        entries.push({fname, nombre: obj.nombre||fname, resumen: obj.resumen||''});
+      }catch(err){ /* archivo individual ilegible: se omite de la lista */ }
+    }
+    if(entries.length===0){
+      body.innerHTML = '<div style="color:var(--dim)">No se pudo leer ningún ejemplo.</div>';
+      return;
+    }
+    body.innerHTML = entries.map(e=>`
+      <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px;">${e.nombre}</div>
+        <div style="color:var(--dim);font-size:12.5px;line-height:1.5;margin-bottom:8px;">${e.resumen}</div>
+        <button class="btn primary" data-fname="${e.fname}" style="padding:5px 12px;">Cargar</button>
+      </div>
+    `).join('');
+    body.querySelectorAll('button[data-fname]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const obj = libraryCache[btn.dataset.fname];
+        if(obj){
+          importCircuitFromText(JSON.stringify(obj));
+          document.getElementById('libraryOverlay').style.display='none';
+        }
+      });
+    });
+  }catch(err){
+    body.innerHTML = '<div style="color:var(--dim)">No se pudo cargar la biblioteca ('+err.message+').<br><br>'+
+      'La biblioteca necesita que la carpeta <code>ejemplos/</code> esté junto a este HTML y que lo abras '+
+      'desde un servidor web (no con doble clic / file://). Por ejemplo, desde una terminal en esa carpeta: '+
+      '<code>python3 -m http.server</code> y luego abre <code>http://localhost:8000</code>.</div>';
+  }
+}
+document.getElementById('libraryBtn').addEventListener('click', ()=>{
+  document.getElementById('libraryOverlay').style.display='flex';
+  loadLibrary();
+});
+document.getElementById('libraryCloseBtn').addEventListener('click', ()=>{
+  document.getElementById('libraryOverlay').style.display='none';
+});
+document.getElementById('libraryOverlay').addEventListener('click', (e)=>{
+  if(e.target.id==='libraryOverlay') document.getElementById('libraryOverlay').style.display='none';
 });
 
 //////////////////////// CIRCUITO DE EJEMPLO INICIAL ///////////////////////////
