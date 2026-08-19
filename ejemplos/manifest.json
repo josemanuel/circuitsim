@@ -8,5 +8,7 @@
   "07-rectificador-led.json",
   "08-mosfet-fuente-comun.json",
   "09-comparador-opamp.json",
-  "10-rlc-serie-resonancia.json"
+  "10-rlc-serie-resonancia.json",
+  "11-tiristor-scr.json",
+  "12-rele-aislamiento.json"
 ]
