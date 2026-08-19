@@ -115,15 +115,19 @@
       <button class="comp-btn" data-tool="currentsource">⇉ Fuente corriente</button>
       <h2>Semiconductores</h2>
       <button class="comp-btn" data-tool="diode">▷| Diodo</button>
+      <button class="comp-btn" data-tool="schottky">▷⌐ Schottky</button>
       <button class="comp-btn" data-tool="led">☀ LED</button>
       <button class="comp-btn" data-tool="zener">▷|| Zener</button>
       <button class="comp-btn" data-tool="npn">🔺 Transistor NPN</button>
       <button class="comp-btn" data-tool="pnp">🔻 Transistor PNP</button>
       <button class="comp-btn" data-tool="nmos">⏫ MOSFET NMOS</button>
       <button class="comp-btn" data-tool="pmos">⏬ MOSFET PMOS</button>
+      <button class="comp-btn" data-tool="scr">⚡▷ Tiristor (SCR)</button>
+      <button class="comp-btn" data-tool="triac">⚡⇄ Triac</button>
       <h2>Activos</h2>
       <button class="comp-btn" data-tool="opamp">▷ Amp. Operacional</button>
       <button class="comp-btn" data-tool="transformer">⊃⊂ Transformador</button>
+      <button class="comp-btn" data-tool="relay">⏚⏻ Relé</button>
       <h2>Otros</h2>
       <button class="comp-btn" data-tool="switch">⏻ Interruptor</button>
       <button class="comp-btn" data-tool="probe">📍 Sonda (Osc.)</button>
@@ -251,12 +255,20 @@ function defaultValue(type){
     case 'nmos': case 'pmos': return 2e-3;  // k (parámetro de transconductancia, A/V²)
     case 'zener': return 5.1;               // Vz, tensión de ruptura
     case 'transformer': return 1;           // relación de vueltas n = Ns/Np
+    case 'scr': case 'triac': return 5e-3;  // corriente de mantenimiento (A)
+    case 'relay': return 400;               // resistencia de la bobina (Ω)
     default: return null;
   }
 }
 function defaultFreq(type){ return type==='acsource' ? 60 : null; }
-function defaultVth(type){ return (type==='nmos'||type==='pmos') ? 2 : null; } // V, umbral
+function defaultVth(type){
+  if(type==='nmos'||type==='pmos') return 2;         // V, umbral de puerta
+  if(type==='scr'||type==='triac') return 0.7;        // V, tensión de disparo de puerta
+  if(type==='relay') return 0.02;                      // A, corriente de accionamiento (pull-in)
+  return null;
+}
 function defaultRail(type){ return type==='opamp' ? 15 : null; }             // V, riel de alimentación (±)
+function defaultClosed(type){ return (type==='scr'||type==='triac'||type==='relay') ? false : true; }
 
 function makeElement(type, x1,y1,x2,y2){
   const el = {
@@ -267,8 +279,8 @@ function makeElement(type, x1,y1,x2,y2){
     rail: defaultRail(type),
     phase: 0,
     wiper: 0.5, // para potenciómetro
-    closed: true, // para interruptor
-    // vd: diodo/LED/zener · vbe/vbc: BJT · vgs/vds: MOSFET · vout: opamp (saturación a rieles)
+    closed: defaultClosed(type), // interruptor / estado de conducción (SCR, triac, relé)
+    // vd: diodo/LED/zener/schottky · vbe/vbc: BJT · vgs/vds: MOSFET · vout: opamp (saturación a rieles)
     state: { vprev:0, iprev:0, vd:0.1, vbe:0.6, vbc:-0.1, vgs:0, vds:0.1, vout:0 },
     vsrcIndex: -1,
     selected:false
@@ -318,6 +330,24 @@ function pins(el){
     // orden: [primario+, primario-, secundario+, secundario-]. El arrastre define
     // la separación horizontal entre bobinados; la separación vertical (devanado)
     // es fija para que el símbolo no se deforme.
+    let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<60) L=60;
+    const H = 60;
+    const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
+    return [rot(0,0), rot(0,H), rot(L,0), rot(L,H)];
+  }
+  if(el.type==='scr' || el.type==='triac'){
+    // orden: [terminal principal 1 (ánodo / MT1), terminal principal 2 (cátodo / MT2), puerta]
+    let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<40) L=40;
+    const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
+    return [{x:el.x1,y:el.y1}, rot(L,0), rot(L*0.5,L*0.5)];
+  }
+  if(el.type==='relay'){
+    // orden: [bobina+, bobina-, contacto común, contacto NA]. Igual que el
+    // transformador: la separación vertical (bobina/contacto) es fija.
     let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<60) L=60;
     const H = 60;
     const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
@@ -487,8 +517,15 @@ function buildComplexMNA(topo, stimulusEl, w){
       case 'capacitor': stampG(ns[0],ns[1], new Cx(0, w*Math.max(el.value,1e-15))); break;
       case 'inductor': stampG(ns[0],ns[1], new Cx(0, -1/(w*Math.max(el.value,1e-9)||1e-12))); break;
       case 'switch': stampG(ns[0],ns[1], new Cx(el.closed?100:1e-9,0)); break;
-      case 'diode': case 'led': {
-        const Is = el.type==='led'?1e-15:1e-12;
+      case 'scr': case 'triac': stampG(ns[0],ns[1], new Cx(el.closed?0.5:1e-9,0)); break;
+      case 'relay': {
+        const [ca,cb,sa,sb] = ns;
+        stampG(ca,cb, new Cx(1/Math.max(el.value,1),0));
+        stampG(sa,sb, new Cx(el.closed?20:1e-9,0));
+        break;
+      }
+      case 'diode': case 'schottky': case 'led': {
+        const Is = el.type==='led'?1e-15 : el.type==='schottky'?1e-8 : 1e-12;
         const Vt = el.type==='led'?0.052:0.026;
         const vd = Math.max(Math.min(el.state.vd,3.0),-5);
         const g = Math.max(Is/Vt*Math.exp(Math.min(vd/Vt,40)), 1e-12);
@@ -715,7 +752,7 @@ function stepSimulation(dt){
 
   // hasta 8 iteraciones de Newton por la no-linealidad de diodos/LED/transistores
   let nodeVoltages = new Array(matSize).fill(0);
-  const nonlinear = elements.filter(e=>e.type==='diode'||e.type==='led'||e.type==='npn'||e.type==='pnp'||e.type==='nmos'||e.type==='pmos'||e.type==='zener'||e.type==='opamp');
+  const nonlinear = elements.filter(e=>e.type==='diode'||e.type==='led'||e.type==='npn'||e.type==='pnp'||e.type==='nmos'||e.type==='pmos'||e.type==='zener'||e.type==='opamp'||e.type==='schottky');
   const iters = nonlinear.length? 20 : 1;
 
   for(let it=0; it<iters; it++){
@@ -819,9 +856,31 @@ function stepSimulation(dt){
           stampG(ns[0],ns[1], 1/r);
           break;
         }
+        case 'scr': {
+          // tiristor: conduce ánodo->cátodo solo si está "cerrado" (disparado),
+          // el disparo/corte se decide en la sección de resultados (histéresis)
+          const Ron = 2, Roff = 1e9;
+          stampG(ns[0],ns[1], 1/(el.closed?Ron:Roff));
+          break;
+        }
+        case 'triac': {
+          // como el SCR pero conduce en ambos sentidos una vez disparado
+          const Ron = 2, Roff = 1e9;
+          stampG(ns[0],ns[1], 1/(el.closed?Ron:Roff));
+          break;
+        }
+        case 'relay': {
+          // bobina (resistencia) + contacto mecánico (interruptor gobernado por
+          // la corriente de bobina, decidido en la sección de resultados)
+          const [ca,cb,sa,sb] = ns;
+          stampG(ca,cb, 1/Math.max(el.value,1));
+          stampG(sa,sb, 1/(el.closed?0.05:1e9));
+          break;
+        }
         case 'diode':
+        case 'schottky':
         case 'led': {
-          const Is = el.type==='led' ? 1e-15 : 1e-12;
+          const Is = el.type==='led' ? 1e-15 : el.type==='schottky' ? 1e-8 : 1e-12;
           const Vt = el.type==='led' ? 0.052 : 0.026; // ideality*Vt aproximado para simular Vf mayor en LED
           let vd = el.state.vd;
           vd = Math.max(Math.min(vd, 3.0), -5);
@@ -942,7 +1001,7 @@ function stepSimulation(dt){
 
     // actualizar el punto de operación de diodos/LED/zener/transistores/op-amp (Newton)
     for(const el of elements){
-      if(el.type==='diode' || el.type==='led' || el.type==='zener'){
+      if(el.type==='diode' || el.type==='led' || el.type==='zener' || el.type==='schottky'){
         const ns = elNodes[el.id];
         const v1 = ns[0]? nodeVoltages[ns[0]-1] : 0;
         const v2 = ns[1]? nodeVoltages[ns[1]-1] : 0;
@@ -992,8 +1051,56 @@ function stepSimulation(dt){
         break;
       }
       case 'switch': el._current = el._vdrop/(el.closed?0.01:1e9); break;
-      case 'diode': case 'led': {
-        const Is = el.type==='led'?1e-15:1e-12;
+      case 'scr': {
+        // pines: [ánodo, cátodo, puerta]
+        const [na,nk,ng] = ns;
+        const Va=na?nodeVoltages[na-1]:0, Vk=nk?nodeVoltages[nk-1]:0, Vg=ng?nodeVoltages[ng-1]:0;
+        const Vak = Va-Vk, Vgk = Vg-Vk;
+        const Ron = 2;
+        el._current = el.closed ? Vak/Ron : 0;
+        el._vak = Vak;
+        const Ihold = Math.max(el.value,1e-6), Vgt = Math.max(el.vth!==undefined?el.vth:0.7, 0.05);
+        if(!el.closed){
+          if(Vgk>Vgt && Vak>0) el.closed = true; // disparo: puerta activa y polarización directa
+        } else {
+          if(Vak<=0 || Math.abs(el._current)<Ihold) el.closed = false; // corte: inversa o bajo corriente de mantenimiento
+        }
+        break;
+      }
+      case 'triac': {
+        // pines: [MT1, MT2, puerta] — conduce en ambos sentidos una vez disparado
+        const [n1,n2,ng] = ns;
+        const V1=n1?nodeVoltages[n1-1]:0, V2=n2?nodeVoltages[n2-1]:0, Vg=ng?nodeVoltages[ng-1]:0;
+        const Vmt = V1-V2, Vg1 = Vg-V1;
+        const Ron = 2;
+        el._current = el.closed ? Vmt/Ron : 0;
+        el._vak = Vmt;
+        const Ihold = Math.max(el.value,1e-6), Vgt = Math.max(el.vth!==undefined?el.vth:0.7, 0.05);
+        if(!el.closed){
+          if(Math.abs(Vg1)>Vgt && Math.abs(Vmt)>0.1) el.closed = true;
+        } else {
+          if(Math.abs(el._current)<Ihold) el.closed = false;
+        }
+        break;
+      }
+      case 'relay': {
+        // pines: [bobina+, bobina-, común, NA]
+        const [ca,cb,sa,sb] = ns;
+        const Vca=ca?nodeVoltages[ca-1]:0, Vcb=cb?nodeVoltages[cb-1]:0;
+        const Icoil = (Vca-Vcb)/Math.max(el.value,1);
+        el._current = Icoil;
+        el._vswitch = (sa&&sb)? (nodeVoltages[sa-1]-nodeVoltages[sb-1]) : 0;
+        const Ipickup = Math.max(el.vth!==undefined?el.vth:0.02, 1e-6);
+        const Idropout = Ipickup*0.6; // histéresis: se desactiva con bastante menos corriente que la de activación
+        if(!el.closed){
+          if(Math.abs(Icoil) > Ipickup) el.closed = true;
+        } else {
+          if(Math.abs(Icoil) < Idropout) el.closed = false;
+        }
+        break;
+      }
+      case 'diode': case 'schottky': case 'led': {
+        const Is = el.type==='led'?1e-15 : el.type==='schottky'?1e-8 : 1e-12;
         const Vt = el.type==='led'?0.052:0.026;
         const vdc = Math.max(Math.min(el._vdrop, 3.0), -5); // mismo límite que en el estampado, para consistencia
         el._current = Is*(Math.exp(Math.min(vdc/Vt,40))-1);
@@ -1302,6 +1409,21 @@ function drawElement(el){
       labelValue(el, (el._current!==undefined? niceUnit(el._current,'A'):''));
       break;
     }
+    case 'schottky': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath();
+        ctx.moveTo(-8,-9); ctx.lineTo(-8,9); ctx.lineTo(8,0); ctx.closePath();
+        ctx.fill();
+        // barra de cátodo en forma de "S" característica del Schottky
+        ctx.beginPath();
+        ctx.moveTo(4,-9); ctx.lineTo(8,-9); ctx.lineTo(8,-4);
+        ctx.moveTo(8,4); ctx.lineTo(8,9); ctx.lineTo(12,9);
+        ctx.moveTo(8,-4); ctx.lineTo(8,4);
+        ctx.stroke();
+      });
+      labelValue(el, (el._current!==undefined? niceUnit(el._current,'A'):''));
+      break;
+    }
     case 'zener': {
       drawTwoTerminal(el,(len,bh)=>{
         ctx.beginPath();
@@ -1475,6 +1597,78 @@ function drawElement(el){
       drawPin(p1.x,p1.y); drawPin(p2.x,p2.y); drawPin(s1.x,s1.y); drawPin(s2.x,s2.y);
       const cx4=(p1.x+s1.x)/2, cy4=(p1.y+s1.y)/2;
       labelAt(cx4, cy4-14, 'n='+niceUnit(el.value,''));
+      break;
+    }
+    case 'scr': case 'triac': {
+      // [t1, t2, gate] — símbolo: diodo (SCR) o dos diodos antiparalelos (triac) + puerta
+      let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<40) L=40;
+      const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+      ctx.save();
+      ctx.translate(el.x1,el.y1);
+      ctx.rotate(ang);
+      ctx.strokeStyle = el.selected? '#4fd1c5' : (el.closed?'#4fd1c5':'#c9d3de');
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = el.selected? 2.5 : 2;
+      const bh = Math.min(28, L*0.28);
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(L/2-bh,0); ctx.moveTo(L/2+bh,0); ctx.lineTo(L,0); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(L/2-8,-9); ctx.lineTo(L/2-8,9); ctx.lineTo(L/2+8,0); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(L/2+8,-9); ctx.lineTo(L/2+8,9); ctx.stroke();
+      if(el.type==='triac'){
+        // segundo diodo antiparalelo, desplazado, para indicar conducción bidireccional
+        ctx.save(); ctx.translate(L/2,0); ctx.rotate(Math.PI);
+        ctx.beginPath(); ctx.moveTo(-8,-9-14); ctx.lineTo(-8,9-14); ctx.lineTo(8,-14); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(8,-9-14); ctx.lineTo(8,9-14); ctx.stroke();
+        ctx.restore();
+      }
+      // patilla de puerta
+      ctx.beginPath(); ctx.moveTo(L/2,10); ctx.lineTo(L*0.5+L*0.22,L*0.5); ctx.stroke();
+      ctx.restore();
+      const [t1,t2,g] = pins(el);
+      drawPin(t1.x,t1.y); drawPin(t2.x,t2.y); drawPin(g.x,g.y);
+      const cx5=(t1.x+t2.x)/2, cy5=(t1.y+t2.y)/2;
+      labelAt(cx5, cy5-22, (el.type==='scr'?'SCR':'Triac')+(el.closed?' (ON)':' (OFF)'));
+      break;
+    }
+    case 'relay': {
+      const [ca,cb,sa,sb] = pins(el);
+      let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<60) L=60;
+      const H = 60;
+      const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+      ctx.save();
+      ctx.translate(el.x1,el.y1);
+      ctx.rotate(ang);
+      ctx.strokeStyle = el.selected? '#4fd1c5' : '#c9d3de';
+      ctx.lineWidth = el.selected? 2.5 : 2;
+      // bobina (rectángulo con líneas diagonales)
+      ctx.strokeRect(L*0.30, 6, L*0.16, H-12);
+      ctx.beginPath();
+      for(let i=0;i<3;i++){ const y=6+(H-12)*(i+0.5)/3; ctx.moveTo(L*0.30,y); ctx.lineTo(L*0.30+L*0.16,y-6); }
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0,0); ctx.lineTo(L*0.30,0+ (0)); // patilla bobina+ (recta hasta el rectángulo, ajustada abajo)
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0,0); ctx.lineTo(L*0.30,6);
+      ctx.moveTo(0,H); ctx.lineTo(L*0.30,H-6);
+      ctx.stroke();
+      // contacto: común -> NA, con un trazo que indica abierto/cerrado
+      ctx.beginPath();
+      ctx.moveTo(L,0); ctx.lineTo(L*0.62,0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(L*0.62,0,2.5,0,Math.PI*2); ctx.arc(L*0.62,H,2.5,0,Math.PI*2); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(L*0.62,0);
+      if(el.closed) ctx.lineTo(L*0.62,H); else ctx.lineTo(L*0.62+14,H*0.7);
+      ctx.stroke();
+      ctx.strokeStyle = el.selected? '#4fd1c5' : '#5a6675'; ctx.setLineDash([2,2]);
+      ctx.beginPath(); ctx.moveTo(L*0.62,H); ctx.lineTo(L,H); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+      drawPin(ca.x,ca.y); drawPin(cb.x,cb.y); drawPin(sa.x,sa.y); drawPin(sb.x,sb.y);
+      const cx6=(ca.x+sa.x)/2, cy6=(ca.y+sa.y)/2;
+      labelAt(cx6, cy6-14, 'Relé'+(el.closed?' (activado)':''));
       break;
     }
   }
@@ -1762,13 +1956,15 @@ function deleteSelected(){
 //////////////////////// PANEL DE PROPIEDADES /////////////////////////////////
 const UNIT_LABEL = {resistor:'Ω',capacitor:'F',inductor:'H',potentiometer:'Ω',
   dcsource:'V',acsource:'V (amplitud)',currentsource:'A',npn:'hFE',pnp:'hFE',
-  opamp:'ganancia A',nmos:'k (A/V²)',pmos:'k (A/V²)',zener:'V (Vz)',transformer:'n = Ns/Np'};
+  opamp:'ganancia A',nmos:'k (A/V²)',pmos:'k (A/V²)',zener:'V (Vz)',transformer:'n = Ns/Np',
+  scr:'A (I mantenimiento)',triac:'A (I mantenimiento)',relay:'Ω (bobina)'};
 const NAME_LABEL = {resistor:'Resistencia',capacitor:'Condensador',inductor:'Bobina',
   potentiometer:'Potenciómetro',dcsource:'Batería DC',acsource:'Fuente AC',
   currentsource:'Fuente de corriente',diode:'Diodo',led:'LED',switch:'Interruptor',
   wire:'Cable',ground:'Tierra',probe:'Sonda',npn:'Transistor NPN',pnp:'Transistor PNP',
   opamp:'Amplificador operacional',nmos:'MOSFET canal N',pmos:'MOSFET canal P',
-  zener:'Diodo Zener',transformer:'Transformador ideal'};
+  zener:'Diodo Zener',transformer:'Transformador ideal',schottky:'Diodo Schottky',
+  scr:'Tiristor (SCR)',triac:'Triac',relay:'Relé electromecánico'};
 
 function renderProps(){
   const body = document.getElementById('propsBody');
@@ -1789,6 +1985,19 @@ function renderProps(){
   }
   if(el.type==='nmos' || el.type==='pmos'){
     html += '<label>Umbral Vth (V)</label><input type="number" id="vthInput" step="any" value="'+el.vth+'">';
+  }
+  if(el.type==='scr' || el.type==='triac'){
+    html += '<label>Tensión de disparo Vgt (V)</label><input type="number" id="vthInput" step="any" value="'+el.vth+'">';
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">Estado: '+
+      (el.closed? '<span style="color:var(--accent)">conduciendo</span>':'bloqueado')+
+      (el._vak!==undefined? '<br>V('+(el.type==='scr'?'AK':'MT1-MT2')+') ≈ '+el._vak.toFixed(3)+' V':'')+
+      (el._current!==undefined? '<br>I ≈ '+niceUnit(el._current,'A'):'')+'</div>';
+  }
+  if(el.type==='relay'){
+    html += '<label>Corriente de accionamiento (A)</label><input type="number" id="vthInput" step="any" value="'+el.vth+'">';
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">Contacto: '+
+      (el.closed? '<span style="color:var(--accent)">cerrado (activado)</span>':'abierto (reposo)')+
+      (el._current!==undefined? '<br>I bobina ≈ '+niceUnit(el._current,'A'):'')+'</div>';
   }
   if(el.type==='opamp'){
     html += '<label>Riel de alimentación ±V</label><input type="number" id="railInput" step="any" value="'+el.rail+'">';
