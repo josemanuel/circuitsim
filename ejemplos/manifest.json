@@ -10,5 +10,7 @@
   "09-comparador-opamp.json",
   "10-rlc-serie-resonancia.json",
   "11-tiristor-scr.json",
-  "12-rele-aislamiento.json"
+  "12-rele-aislamiento.json",
+  "13-semisumador-puertas.json",
+  "14-555-astable-led.json"
 ]

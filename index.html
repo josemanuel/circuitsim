@@ -20,6 +20,8 @@
   .btn{background:#2a3340;border:1px solid var(--border);color:var(--text);padding:6px 10px;
     border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;}
   .btn:hover{background:#333f4e;}
+  .btn:disabled{opacity:.35;cursor:not-allowed;}
+  .btn:disabled:hover{background:#2a3340;}
   .btn.active{background:var(--accent);color:#0b1013;border-color:var(--accent);font-weight:600;}
   .btn.primary{background:var(--accent);color:#0b1013;font-weight:600;border-color:var(--accent);}
   .btn.danger{background:#3a1f1e;border-color:#5c2b28;color:#ffb4ae;}
@@ -94,6 +96,9 @@
     <button class="btn primary" id="playBtn">⏸ Pausa</button>
     <button class="btn" id="resetBtn">↺ Reiniciar</button>
     <div class="sep"></div>
+    <button class="btn" id="undoBtn" title="Deshacer (Ctrl+Z)" disabled>↶</button>
+    <button class="btn" id="redoBtn" title="Rehacer (Ctrl+Y)" disabled>↷</button>
+    <div class="sep"></div>
     <div class="slider-wrap">Velocidad
       <input type="range" id="speedSlider" min="1" max="200" value="60">
       <span id="speedVal">1×</span>
@@ -106,6 +111,8 @@
     <button class="btn" id="exportBtn">💾 Exportar</button>
     <label class="btn" style="cursor:pointer;margin:0;">📂 Importar<input type="file" id="importFile" accept="application/json" style="display:none"></label>
     <button class="btn" id="libraryBtn">📚 Biblioteca</button>
+    <button class="btn" id="savedBtn">🗄️ Mis circuitos</button>
+    <button class="btn" id="audioBtn" title="Activar/desactivar el audio de los altavoces del circuito">🔈 Audio</button>
     <div style="flex:1"></div>
     <span id="statusMsg" style="font-size:12px;color:var(--dim)"></span>
   </header>
@@ -142,7 +149,22 @@
       <button class="comp-btn" data-tool="relay">⏚⏻ Relé</button>
       <h2>Otros</h2>
       <button class="comp-btn" data-tool="switch">⏻ Interruptor</button>
+      <button class="comp-btn" data-tool="fuse">🧵 Fusible</button>
+      <h2>Medición</h2>
+      <button class="comp-btn" data-tool="ammeter">Ⓐ Amperímetro</button>
+      <button class="comp-btn" data-tool="voltmeter">Ⓥ Voltímetro</button>
       <button class="comp-btn" data-tool="probe">📍 Sonda (Osc.)</button>
+      <h2>Digital</h2>
+      <button class="comp-btn" data-tool="gate_and">⊃D AND</button>
+      <button class="comp-btn" data-tool="gate_or">⊃) OR</button>
+      <button class="comp-btn" data-tool="gate_not">▷o NOT</button>
+      <button class="comp-btn" data-tool="gate_nand">⊃Do NAND</button>
+      <button class="comp-btn" data-tool="gate_nor">⊃)o NOR</button>
+      <button class="comp-btn" data-tool="gate_xor">⊃))  XOR</button>
+      <button class="comp-btn" data-tool="gate_xnor">⊃))o XNOR</button>
+      <button class="comp-btn" data-tool="555">◫ Temporizador 555</button>
+      <h2>Salida</h2>
+      <button class="comp-btn" data-tool="speaker">🔊 Altavoz</button>
     </div>
 
     <div id="canvasWrap">
@@ -213,6 +235,19 @@
     </div>
   </div>
 
+  <div id="savedOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);
+      z-index:50;align-items:center;justify-content:center;">
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;
+        width:min(560px,92vw);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
+          border-bottom:1px solid var(--border);">
+        <h2 style="margin:0;font-size:15px;color:var(--accent);">🗄️ Mis circuitos</h2>
+        <button class="btn" id="savedCloseBtn" style="padding:4px 10px;">✕</button>
+      </div>
+      <div id="savedBody" style="overflow-y:auto;padding:14px 18px;font-size:13px;"></div>
+    </div>
+  </div>
+
   <footer>
     <span id="hint">Elige una herramienta y arrastra sobre el lienzo para colocar un componente.</span>
     <span id="simTime">t = 0.000 s</span>
@@ -245,6 +280,7 @@ let simTime = 0;
 let elemCounter = 0;
 let scopeProbes = [];   // {id, elemId, color, label}
 const PROBE_COLORS = ['#4fd1c5','#f6ad55','#f56565','#68d391','#63b3ed','#d6bcfa','#faf089'];
+const GATE_SHORT = {gate_and:'AND',gate_or:'OR',gate_nand:'NAND',gate_nor:'NOR',gate_xor:'XOR',gate_xnor:'XNOR',gate_not:'NOT'};
 
 // muestras del osciloscopio: por sonda, array de {t, v}
 let scopeData = {};
@@ -272,6 +308,11 @@ function defaultValue(type){
     case 'transformer': return 1;           // relación de vueltas n = Ns/Np
     case 'scr': case 'triac': return 5e-3;  // corriente de mantenimiento (A)
     case 'relay': return 400;               // resistencia de la bobina (Ω)
+    case 'fuse': return 0.5;                // corriente de fusión (A)
+    case 'gate_and': case 'gate_or': case 'gate_nand':
+    case 'gate_nor': case 'gate_xor': case 'gate_xnor':
+    case 'gate_not': return 5;              // VCC lógica (V)
+    case 'speaker': return 8;               // impedancia (Ω)
     default: return null;
   }
 }
@@ -296,7 +337,7 @@ function makeElement(type, x1,y1,x2,y2){
     wiper: 0.5, // para potenciómetro
     closed: defaultClosed(type), // interruptor / estado de conducción (SCR, triac, relé)
     // vd: diodo/LED/zener/schottky · vbe/vbc: BJT · vgs/vds: MOSFET · vout: opamp (saturación a rieles)
-    state: { vprev:0, iprev:0, vd:0.1, vbe:0.6, vbc:-0.1, vgs:0, vds:0.1, vout:0 },
+    state: { vprev:0, iprev:0, vd:0.1, vbe:0.6, vbc:-0.1, vgs:0, vds:0.1, vout:0, ff:false, vvcc:5, vgnd:0, logicIn1:0, logicIn2:0 },
     vsrcIndex: -1,
     selected:false
   };
@@ -370,6 +411,28 @@ function pins(el){
     const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
     return [rot(0,0), rot(0,H), rot(L,0), rot(L,H)];
   }
+  if(el.type==='gate_and'||el.type==='gate_or'||el.type==='gate_nand'||
+     el.type==='gate_nor'||el.type==='gate_xor'||el.type==='gate_xnor'){
+    // orden: [entrada1, entrada2, salida]
+    let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<50) L=50;
+    const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
+    return [rot(0,-L*0.3), rot(0,L*0.3), rot(L,0)];
+  }
+  if(el.type==='gate_not'){
+    // orden: [entrada, salida] — 2 terminales simples
+    return [{x:el.x1,y:el.y1},{x:el.x2,y:el.y2}];
+  }
+  if(el.type==='555'){
+    // orden: [VCC, TRIG, THRES, RESET, GND, DISCH, OUT]
+    let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<80) L=80;
+    const H = 36;
+    const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    const rot=(lx,ly)=>({x:el.x1+lx*cos-ly*sin, y:el.y1+lx*sin+ly*cos});
+    return [rot(0,0), rot(0,H), rot(0,2*H), rot(0,3*H), rot(L,0), rot(L,H), rot(L,2*H)];
+  }
   return [{x:el.x1,y:el.y1},{x:el.x2,y:el.y2}];
 }
 
@@ -422,7 +485,8 @@ function buildTopology(){
   }
   const nodeCount = nextNode-1;
   // fuentes de tensión y op-amps necesitan una incógnita extra (corriente de rama)
-  const vsrcElems = elements.filter(e=>e.type==='dcsource'||e.type==='acsource'||e.type==='opamp'||e.type==='transformer');
+  const vsrcElems = elements.filter(e=>e.type==='dcsource'||e.type==='acsource'||e.type==='opamp'||e.type==='transformer'||
+    e.type==='gate_and'||e.type==='gate_or'||e.type==='gate_nand'||e.type==='gate_nor'||e.type==='gate_xor'||e.type==='gate_xnor'||e.type==='gate_not'||e.type==='555');
   vsrcElems.forEach((e,i)=> e.vsrcIndex = i);
   return {nodeOf, elNodes, nodeCount, vsrcElems, dsu};
 }
@@ -518,6 +582,11 @@ function buildComplexMNA(topo, stimulusEl, w){
     if(s1){ A[s1-1][row]=A[s1-1][row].sub(a); A[row][s1-1]=A[row][s1-1].sub(a); }
     if(s2){ A[s2-1][row]=A[s2-1][row].add(a); A[row][s2-1]=A[row][s2-1].add(a); }
   }
+  function stampFixedOut(nout,idx,val){ // val: Cx — fuerza la salida a un valor de pequeña señal fijo
+    const row = nodeCount+idx;
+    if(nout){ A[nout-1][row]=A[nout-1][row].add(new Cx(1,0)); A[row][nout-1]=A[row][nout-1].add(new Cx(1,0)); }
+    rhs[row]=rhs[row].add(val);
+  }
   for(const el of elements){
     if(el.type==='wire'||el.type==='ground'||el.type==='probe') continue;
     const ns = elNodes[el.id];
@@ -537,6 +606,24 @@ function buildComplexMNA(topo, stimulusEl, w){
         const [ca,cb,sa,sb] = ns;
         stampG(ca,cb, new Cx(1/Math.max(el.value,1),0));
         stampG(sa,sb, new Cx(el.closed?20:1e-9,0));
+        break;
+      }
+      case 'fuse': stampG(ns[0],ns[1], new Cx(el.closed?100:1e-9,0)); break;
+      case 'ammeter': stampG(ns[0],ns[1], new Cx(1000,0)); break;
+      case 'voltmeter': stampG(ns[0],ns[1], new Cx(1e-9,0)); break;
+      case 'speaker': stampG(ns[0],ns[1], new Cx(1/Math.max(el.value,1),0)); break;
+      case 'gate_and': case 'gate_or': case 'gate_nand': case 'gate_nor':
+      case 'gate_xor': case 'gate_xnor': {
+        // dispositivo digital saturado: sin ganancia de pequeña señal (como una
+        // fuente DC, se cortocircuita en el dominio AC)
+        stampFixedOut(ns[2], el.vsrcIndex, CZERO);
+        break;
+      }
+      case 'gate_not': stampFixedOut(ns[1], el.vsrcIndex, CZERO); break;
+      case '555': {
+        const [nVcc,nTrig,nThres,nReset,nGnd,nDisch,nOut] = ns;
+        stampFixedOut(nOut, el.vsrcIndex, CZERO);
+        stampG(nDisch, nGnd, new Cx(el.state.ff? 1e-9 : 0.1, 0));
         break;
       }
       case 'diode': case 'schottky': case 'led': {
@@ -744,7 +831,7 @@ function importCircuitFromText(text){
     rail: (e.rail!==undefined? e.rail:defaultRail(e.type)),
     wiper: e.wiper!==undefined? e.wiper:0.5,
     closed: e.closed!==undefined? e.closed:true,
-    state:{vprev:0,iprev:0,vd:0.1,vbe:0.6,vbc:-0.1,vgs:0,vds:0.1,vout:0}, vsrcIndex:-1, selected:false
+    state:{vprev:0,iprev:0,vd:0.1,vbe:0.6,vbc:-0.1,vgs:0,vds:0.1,vout:0,ff:false,vvcc:5,vgnd:0,logicIn1:0,logicIn2:0}, vsrcIndex:-1, selected:false
   }));
   let maxN=0;
   for(const e of elements){ const m=/^e(\d+)$/.exec(e.id); if(m) maxN=Math.max(maxN, parseInt(m[1])); }
@@ -756,8 +843,100 @@ function importCircuitFromText(text){
   refreshProbeList(); renderProps(); populateBodeSelectors();
 }
 
+//////////////////////// DESHACER / REHACER ////////////////////////////////////
+// Historial de snapshots del circuito (misma serialización que exportar/importar).
+// Cada acción que modifica la topología (colocar, borrar, mover, editar un valor,
+// importar…) llama a pushUndo() ANTES de aplicar el cambio.
+let undoStack = [];
+let redoStack = [];
+const MAX_HISTORY = 60;
+function pushUndo(){
+  undoStack.push(serializeCircuit());
+  if(undoStack.length>MAX_HISTORY) undoStack.shift();
+  redoStack = [];
+  updateUndoRedoButtons();
+}
+function doUndo(){
+  if(undoStack.length===0) return;
+  const cur = serializeCircuit();
+  const prev = undoStack.pop();
+  redoStack.push(cur);
+  importCircuitFromText(prev);
+  updateUndoRedoButtons();
+}
+function doRedo(){
+  if(redoStack.length===0) return;
+  const cur = serializeCircuit();
+  const next = redoStack.pop();
+  undoStack.push(cur);
+  importCircuitFromText(next);
+  updateUndoRedoButtons();
+}
+function updateUndoRedoButtons(){
+  const ub = document.getElementById('undoBtn'), rb = document.getElementById('redoBtn');
+  if(ub) ub.disabled = undoStack.length===0;
+  if(rb) rb.disabled = redoStack.length===0;
+}
+// campos de texto/número/rango: agrupar todas las pulsaciones de una misma sesión
+// de edición (desde que el campo recibe el foco) en un único paso de deshacer.
+function attachUndoableInput(inputEl){
+  let armed = true;
+  inputEl.addEventListener('focus', ()=>{ armed = true; });
+  inputEl.addEventListener('input', ()=>{
+    if(armed){ pushUndo(); armed = false; }
+  });
+}
+
 //////////////////////// MOTOR DE SIMULACIÓN /////////////////////////////////
 const DT = 5e-5; // paso interno fijo (20 kHz) — buen compromiso estabilidad/velocidad
+
+//////////////////////// SALIDA DE AUDIO (ALTAVOZ) ////////////////////////////
+// Reproduce en tiempo real la tensión sobre los elementos "speaker" del
+// circuito usando la Web Audio API. Los navegadores exigen un gesto del
+// usuario para arrancar el AudioContext, así que se activa con un botón.
+let audioCtx = null;
+let audioNextTime = 0;
+let audioSampleQueue = [];
+const AUDIO_SIM_RATE = 1/DT; // 20000 Hz — la tasa nativa de nuestro paso de simulación
+
+function enableAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  audioNextTime = audioCtx.currentTime;
+  audioSampleQueue = [];
+  document.getElementById('audioBtn').classList.add('active');
+}
+function disableAudio(){
+  if(!audioCtx) return;
+  audioCtx.close();
+  audioCtx = null;
+  audioSampleQueue = [];
+  document.getElementById('audioBtn').classList.remove('active');
+}
+function flushAudioQueue(){
+  if(!audioCtx || audioSampleQueue.length===0) return;
+  // si nos quedamos muy atrás (más de 1s de audio en cola), descartamos lo más
+  // antiguo para no acumular retraso indefinidamente ni consumir memoria de más
+  if(audioSampleQueue.length > AUDIO_SIM_RATE){
+    audioSampleQueue = audioSampleQueue.slice(audioSampleQueue.length-AUDIO_SIM_RATE);
+    audioNextTime = audioCtx.currentTime;
+  }
+  const n = audioSampleQueue.length;
+  // el buffer declara su PROPIA frecuencia de muestreo (20kHz); Web Audio
+  // remuestrea automáticamente al reproducirlo, sin que tengamos que hacerlo a mano
+  const buf = audioCtx.createBuffer(1, n, AUDIO_SIM_RATE);
+  const data = buf.getChannelData(0);
+  const scale = 1/6; // referencia aproximada: ±6V de la señal -> ±1.0 de amplitud de audio
+  for(let i=0;i<n;i++) data[i] = Math.max(-1, Math.min(1, audioSampleQueue[i]*scale));
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  const startAt = Math.max(audioNextTime, audioCtx.currentTime);
+  src.start(startAt);
+  audioNextTime = startAt + buf.duration;
+  audioSampleQueue = [];
+}
+
 
 function stepSimulation(dt){
   const topo = buildTopology();
@@ -767,7 +946,8 @@ function stepSimulation(dt){
 
   // hasta 8 iteraciones de Newton por la no-linealidad de diodos/LED/transistores
   let nodeVoltages = new Array(matSize).fill(0);
-  const nonlinear = elements.filter(e=>e.type==='diode'||e.type==='led'||e.type==='npn'||e.type==='pnp'||e.type==='nmos'||e.type==='pmos'||e.type==='zener'||e.type==='opamp'||e.type==='schottky');
+  const nonlinear = elements.filter(e=>e.type==='diode'||e.type==='led'||e.type==='npn'||e.type==='pnp'||e.type==='nmos'||e.type==='pmos'||e.type==='zener'||e.type==='opamp'||e.type==='schottky'||
+    e.type==='gate_and'||e.type==='gate_or'||e.type==='gate_nand'||e.type==='gate_nor'||e.type==='gate_xor'||e.type==='gate_xnor'||e.type==='gate_not');
   const iters = nonlinear.length? 20 : 1;
 
   for(let it=0; it<iters; it++){
@@ -890,6 +1070,62 @@ function stepSimulation(dt){
           const [ca,cb,sa,sb] = ns;
           stampG(ca,cb, 1/Math.max(el.value,1));
           stampG(sa,sb, 1/(el.closed?0.05:1e9));
+          break;
+        }
+        case 'fuse': {
+          // como un interruptor: conduce hasta que "funde" (ver resultados)
+          stampG(ns[0],ns[1], 1/(el.closed?0.01:1e9));
+          break;
+        }
+        case 'ammeter': {
+          // amperímetro ideal: resistencia muy baja, no perturba el circuito
+          stampG(ns[0],ns[1], 1/0.001);
+          break;
+        }
+        case 'voltmeter': {
+          // voltímetro ideal: resistencia muy alta, apenas consume corriente
+          stampG(ns[0],ns[1], 1/1e9);
+          break;
+        }
+        case 'speaker': {
+          // impedancia resistiva; la salida de audio se gestiona aparte
+          stampG(ns[0],ns[1], 1/Math.max(el.value,1));
+          break;
+        }
+        case 'gate_and': case 'gate_or': case 'gate_nand':
+        case 'gate_nor': case 'gate_xor': case 'gate_xnor': {
+          // puerta de 2 entradas: la salida se fuerza a VCC o 0V según el
+          // estado (umbralizado) de las entradas en la última iteración/paso.
+          const [n1,n2,nout] = ns;
+          const VCC = Math.max(el.value,0.1), Vth = VCC*0.5;
+          const b1 = (el.state.logicIn1||0) > Vth, b2 = (el.state.logicIn2||0) > Vth;
+          let outHigh;
+          switch(el.type){
+            case 'gate_and': outHigh = b1&&b2; break;
+            case 'gate_or': outHigh = b1||b2; break;
+            case 'gate_nand': outHigh = !(b1&&b2); break;
+            case 'gate_nor': outHigh = !(b1||b2); break;
+            case 'gate_xor': outHigh = b1!==b2; break;
+            case 'gate_xnor': outHigh = b1===b2; break;
+          }
+          stampFixedOut(nout, el.vsrcIndex, outHigh? VCC : 0);
+          break;
+        }
+        case 'gate_not': {
+          const [n1,nout] = ns;
+          const VCC = Math.max(el.value,0.1), Vth = VCC*0.5;
+          const b1 = (el.state.logicIn1||0) > Vth;
+          stampFixedOut(nout, el.vsrcIndex, b1? 0 : VCC);
+          break;
+        }
+        case '555': {
+          // pines: [VCC, TRIG, THRES, RESET, GND, DISCH, OUT]
+          const [nVcc,nTrig,nThres,nReset,nGnd,nDisch,nOut] = ns;
+          const Vvcc = el.state.vvcc!==undefined? el.state.vvcc:5;
+          const Vgnd = el.state.vgnd!==undefined? el.state.vgnd:0;
+          const targetOut = el.state.ff? Vvcc : Vgnd;
+          stampFixedOut(nOut, el.vsrcIndex, targetOut);
+          stampG(nDisch, nGnd, 1/(el.state.ff? 1e9 : 10)); // transistor de descarga: conduce cuando la salida está en bajo
           break;
         }
         case 'diode':
@@ -1040,6 +1276,14 @@ function stepSimulation(dt){
       } else if(el.type==='opamp'){
         const [,,voutN] = elNodes[el.id];
         el.state.vout = voutN? nodeVoltages[voutN-1] : 0;
+      } else if(el.type==='gate_and'||el.type==='gate_or'||el.type==='gate_nand'||
+                el.type==='gate_nor'||el.type==='gate_xor'||el.type==='gate_xnor'){
+        const [n1,n2] = elNodes[el.id];
+        el.state.logicIn1 = n1? nodeVoltages[n1-1] : 0;
+        el.state.logicIn2 = n2? nodeVoltages[n2-1] : 0;
+      } else if(el.type==='gate_not'){
+        const [n1] = elNodes[el.id];
+        el.state.logicIn1 = n1? nodeVoltages[n1-1] : 0;
       }
     }
   }
@@ -1112,6 +1356,66 @@ function stepSimulation(dt){
         } else {
           if(Math.abs(Icoil) < Idropout) el.closed = false;
         }
+        break;
+      }
+      case 'fuse': {
+        el._current = el._vdrop/(el.closed?0.01:1e9);
+        // se funde de forma permanente si se supera la corriente nominal (no hay
+        // rearme automático: hay que hacer clic sobre él en modo Seleccionar)
+        if(el.closed && Math.abs(el._current) > Math.max(el.value,1e-6)) el.closed = false;
+        break;
+      }
+      case 'ammeter': el._current = el._vdrop/0.001; break;
+      case 'voltmeter': el._current = el._vdrop/1e9; break;
+      case 'speaker': {
+        el._current = el._vdrop/Math.max(el.value,1);
+        if(typeof audioSampleQueue!=='undefined' && audioCtx){ audioSampleQueue.push(el._vdrop); }
+        break;
+      }
+      case 'gate_and': case 'gate_or': case 'gate_nand':
+      case 'gate_nor': case 'gate_xor': case 'gate_xnor': {
+        const [n1,n2,nout] = ns;
+        const VCC = Math.max(el.value,0.1), Vth = VCC*0.5;
+        const b1 = (n1?nodeVoltages[n1-1]:0) > Vth, b2 = (n2?nodeVoltages[n2-1]:0) > Vth;
+        let outHigh;
+        switch(el.type){
+          case 'gate_and': outHigh = b1&&b2; break;
+          case 'gate_or': outHigh = b1||b2; break;
+          case 'gate_nand': outHigh = !(b1&&b2); break;
+          case 'gate_nor': outHigh = !(b1||b2); break;
+          case 'gate_xor': outHigh = b1!==b2; break;
+          case 'gate_xnor': outHigh = b1===b2; break;
+        }
+        el._out = outHigh;
+        el._current = nout? nodeVoltages[nodeCount+el.vsrcIndex] : 0;
+        break;
+      }
+      case 'gate_not': {
+        const [n1,nout] = ns;
+        const VCC = Math.max(el.value,0.1), Vth = VCC*0.5;
+        el._out = !((n1?nodeVoltages[n1-1]:0) > Vth);
+        el._current = nodeVoltages[nodeCount+el.vsrcIndex];
+        break;
+      }
+      case '555': {
+        const [nVcc,nTrig,nThres,nReset,nGnd,nDisch,nOut] = ns;
+        const Vvcc = nVcc? nodeVoltages[nVcc-1] : 5;
+        const Vgnd = nGnd? nodeVoltages[nGnd-1] : 0;
+        const Vtrig = nTrig? nodeVoltages[nTrig-1] : 0;
+        const Vthres = nThres? nodeVoltages[nThres-1] : 0;
+        const Vreset = nReset? nodeVoltages[nReset-1] : 0;
+        const Vsupply = Math.max(Vvcc-Vgnd, 0.1);
+        const trigTh = Vgnd + Vsupply/3;
+        const highTh = Vgnd + 2*Vsupply/3;
+        const resetActive = (Vreset-Vgnd) < 0.4;
+        let ff = el.state.ff;
+        if(resetActive){ ff = false; }
+        else {
+          if(Vtrig < trigTh) ff = true;
+          else if(Vthres > highTh) ff = false;
+        }
+        el.state.ff = ff; el.state.vvcc = Vvcc; el.state.vgnd = Vgnd;
+        el._out = ff; el._current = nOut? nodeVoltages[nodeCount+el.vsrcIndex] : 0;
         break;
       }
       case 'diode': case 'schottky': case 'led': {
@@ -1208,6 +1512,7 @@ function frame(ts){
     steps = Math.max(0, Math.min(steps, 400)); // limitar por frame
     for(let i=0;i<steps;i++) stepSimulation(DT);
   }
+  flushAudioQueue();
   draw();
   drawScope();
   document.getElementById('simTime').textContent = 't = ' + simTime.toFixed(4) + ' s';
@@ -1412,6 +1717,24 @@ function drawElement(el){
         ctx.stroke();
       });
       labelValue(el, el.closed?'Cerrado':'Abierto');
+      break;
+    }
+    case 'fuse': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.strokeStyle = el.closed? ctx.strokeStyle : '#e5534b';
+        ctx.beginPath();
+        ctx.ellipse(0,0,bh*0.85,9,0,0,Math.PI*2);
+        ctx.stroke();
+        ctx.beginPath();
+        if(el.closed){ ctx.moveTo(-bh*0.7,0); ctx.lineTo(bh*0.7,0); }
+        else { // filamento roto
+          ctx.moveTo(-bh*0.7,0); ctx.lineTo(-bh*0.15,0);
+          ctx.moveTo(bh*0.15,3); ctx.lineTo(bh*0.7,0);
+        }
+        ctx.stroke();
+      });
+      labelValue(el, (el.closed? 'OK':'FUNDIDO')+' · '+niceUnit(el.value,'A')+
+        (el._current!==undefined? '  I='+niceUnit(el._current,'A'):''));
       break;
     }
     case 'diode': {
@@ -1686,6 +2009,123 @@ function drawElement(el){
       labelAt(cx6, cy6-14, 'Relé'+(el.closed?' (activado)':''));
       break;
     }
+    case 'ammeter': case 'voltmeter': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath(); ctx.arc(0,0,bh,0,Math.PI*2); ctx.stroke();
+        ctx.font='13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(el.type==='ammeter'?'A':'V', 0, 1);
+        ctx.textBaseline='alphabetic';
+      });
+      const reading = el.type==='ammeter'
+        ? (el._current!==undefined? niceUnit(el._current,'A') : '—')
+        : (el._vdrop!==undefined? el._vdrop.toFixed(3)+'V' : '—');
+      labelValue(el, reading);
+      break;
+    }
+    case 'gate_and': case 'gate_or': case 'gate_nand':
+    case 'gate_nor': case 'gate_xor': case 'gate_xnor': {
+      const [in1,in2,out] = pins(el);
+      let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<50) L=50;
+      const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+      ctx.save();
+      ctx.translate(el.x1,el.y1);
+      ctx.rotate(ang);
+      ctx.strokeStyle = el.selected? '#4fd1c5' : '#c9d3de';
+      ctx.lineWidth = el.selected? 2.5 : 2;
+      const h = Math.min(L*0.3, 20);
+      const bodyLen = Math.max(L*0.5, 30);
+      ctx.beginPath();
+      ctx.moveTo(-L*0.15,-h); ctx.lineTo(0,-h);
+      ctx.moveTo(-L*0.15,h); ctx.lineTo(0,h);
+      ctx.stroke();
+      const isOrFamily = el.type==='gate_or'||el.type==='gate_nor'||el.type==='gate_xor'||el.type==='gate_xnor';
+      const hasBubble = el.type==='gate_nand'||el.type==='gate_nor'||el.type==='gate_xnor';
+      const doubleCurve = el.type==='gate_xor'||el.type==='gate_xnor';
+      ctx.beginPath();
+      if(!isOrFamily){
+        ctx.moveTo(0,-h);
+        ctx.lineTo(bodyLen*0.5,-h);
+        ctx.arc(bodyLen*0.5,0,h,-Math.PI/2,Math.PI/2,false);
+        ctx.lineTo(0,h);
+        ctx.closePath();
+      } else {
+        ctx.moveTo(0,-h);
+        ctx.quadraticCurveTo(bodyLen*0.25,0, 0,h);
+        ctx.quadraticCurveTo(bodyLen*0.55,h*0.9, bodyLen,0);
+        ctx.quadraticCurveTo(bodyLen*0.55,-h*0.9, 0,-h);
+        ctx.closePath();
+      }
+      ctx.stroke();
+      let outLocalX = isOrFamily? bodyLen : bodyLen*0.5+h;
+      if(doubleCurve){
+        ctx.beginPath();
+        ctx.moveTo(-7,-h-2);
+        ctx.quadraticCurveTo(bodyLen*0.2,0, -7,h+2);
+        ctx.stroke();
+      }
+      if(hasBubble){
+        ctx.beginPath(); ctx.arc(outLocalX+4,0,4,0,Math.PI*2); ctx.stroke();
+        outLocalX += 8;
+      }
+      ctx.beginPath(); ctx.moveTo(outLocalX,0); ctx.lineTo(L,0); ctx.stroke();
+      ctx.restore();
+      drawPin(in1.x,in1.y); drawPin(in2.x,in2.y); drawPin(out.x,out.y);
+      const cx7=(in1.x+in2.x)/2, cy7=(in1.y+in2.y)/2;
+      labelAt((cx7+out.x)/2, cy7-h-14, GATE_SHORT[el.type]+(el._out!==undefined? (el._out?' [1]':' [0]'):''));
+      break;
+    }
+    case 'gate_not': {
+      drawTwoTerminal(el,(len,bh)=>{
+        const w = Math.min(20,bh);
+        ctx.beginPath();
+        ctx.moveTo(-w,-9); ctx.lineTo(-w,9); ctx.lineTo(w-4,0); ctx.closePath();
+        ctx.stroke();
+        ctx.beginPath(); ctx.arc(w,0,4,0,Math.PI*2); ctx.stroke();
+      });
+      labelValue(el, 'NOT'+(el._out!==undefined? (el._out?' [1]':' [0]'):''));
+      break;
+    }
+    case '555': {
+      const [pVcc,pTrig,pThres,pReset,pGnd,pDisch,pOut] = pins(el);
+      let L = Math.hypot(el.x2-el.x1, el.y2-el.y1); if(L<80) L=80;
+      const H = 36;
+      const ang = Math.atan2(el.y2-el.y1, el.x2-el.x1);
+      ctx.save();
+      ctx.translate(el.x1,el.y1);
+      ctx.rotate(ang);
+      ctx.strokeStyle = el.selected? '#4fd1c5' : '#c9d3de';
+      ctx.fillStyle = 'rgba(79,209,197,0.05)';
+      ctx.lineWidth = el.selected? 2.5 : 2;
+      ctx.beginPath(); ctx.rect(14,-14, L-28, 3*H+14); ctx.fill(); ctx.stroke();
+      // patillas
+      ctx.beginPath();
+      [0,H,2*H,3*H].forEach(y=>{ ctx.moveTo(0,y); ctx.lineTo(14,y); });
+      [0,H,2*H].forEach(y=>{ ctx.moveTo(L-14,y); ctx.lineTo(L,y); });
+      ctx.stroke();
+      ctx.font='9.5px monospace'; ctx.fillStyle=ctx.strokeStyle; ctx.textAlign='left';
+      ['VCC','TRIG','THRES','RST'].forEach((t,i)=> ctx.fillText(t, 17, i*H+3));
+      ctx.textAlign='right';
+      ['GND','DISCH','OUT'].forEach((t,i)=> ctx.fillText(t, L-17, i*H+3));
+      ctx.textAlign='center';
+      ctx.font='11px sans-serif';
+      ctx.fillText('555', L/2, 1.5*H+4);
+      ctx.restore();
+      [pVcc,pTrig,pThres,pReset,pGnd,pDisch,pOut].forEach(p=>drawPin(p.x,p.y));
+      labelAt((pVcc.x+pOut.x)/2, pVcc.y-22, '555'+(el._out!==undefined? (el._out?' OUT=1':' OUT=0'):''));
+      break;
+    }
+    case 'speaker': {
+      drawTwoTerminal(el,(len,bh)=>{
+        ctx.beginPath();
+        ctx.rect(-6,-9,8,18);
+        ctx.moveTo(2,-9); ctx.lineTo(14,-16); ctx.lineTo(14,16); ctx.lineTo(2,9);
+        ctx.closePath();
+        ctx.stroke();
+      });
+      labelValue(el, (el._current!==undefined? niceUnit(el._current,'A'):'') +
+        (typeof audioCtx!=='undefined' && audioCtx? ' 🔊':''));
+      break;
+    }
   }
 }
 
@@ -1801,6 +2241,7 @@ function refreshProbeList(){
     const span=document.createElement('span'); span.textContent=p.label;
     const btn=document.createElement('button'); btn.textContent='✕';
     btn.onclick=()=>{
+      pushUndo();
       scopeProbes = scopeProbes.filter(x=>x.id!==p.id);
       delete scopeData[p.id];
       elements = elements.filter(e=>e.id!==p.elemId);
@@ -1899,23 +2340,31 @@ canvas.addEventListener('mousedown', (e)=>{
     const hit = hitTest(g.x,g.y);
     if(hit && hit===selected){
       // segundo clic sobre el ya seleccionado: iniciar arrastre para moverlo
+      pushUndo();
       moveDrag = { el:hit, startX:g.x, startY:g.y, x1:hit.x1,y1:hit.y1,x2:hit.x2,y2:hit.y2,
         attached: findAttachedWireEnds(hit) };
       return;
     }
     selectElement(hit);
     if(hit && hit.type==='switch'){
+      pushUndo();
       hit.closed = !hit.closed;
+    }
+    if(hit && hit.type==='fuse' && !hit.closed){
+      pushUndo();
+      hit.closed = true; // "reparar" el fusible fundido con un clic
     }
     return;
   }
   if(currentTool==='ground'){
     const snapPt = nearestExistingPoint(g.x,g.y) || g;
+    pushUndo();
     elements.push(makeElement('ground', snapPt.x, snapPt.y, snapPt.x, snapPt.y));
     return;
   }
   if(currentTool==='probe'){
     const snapPt = nearestExistingPoint(g.x,g.y) || g;
+    pushUndo();
     const el = makeElement('probe', snapPt.x, snapPt.y, snapPt.x, snapPt.y);
     elements.push(el);
     const color = PROBE_COLORS[scopeProbes.length % PROBE_COLORS.length];
@@ -1958,6 +2407,7 @@ canvas.addEventListener('mouseup', ()=>{
   if(moveDrag){ moveDrag=null; return; }
   if(!dragStart) return;
   if(dragEnd && (dragStart.x!==dragEnd.x || dragStart.y!==dragEnd.y)){
+    pushUndo();
     const el = makeElement(currentTool, dragStart.x, dragStart.y, dragEnd.x, dragEnd.y);
     elements.push(el);
     selectElement(el);
@@ -1971,8 +2421,15 @@ document.addEventListener('keydown',(e)=>{
   if((e.key==='Delete'||e.key==='Backspace') && selected && document.activeElement.tagName!=='INPUT'){
     deleteSelected();
   }
-  if(e.key==='Escape'){ dragStart=null; dragEnd=null; }
+  if(e.key==='Escape'){ dragStart=null; dragEnd=null; moveDrag=null; }
+  if((e.ctrlKey||e.metaKey) && document.activeElement.tagName!=='INPUT'){
+    const k = e.key.toLowerCase();
+    if(k==='z' && !e.shiftKey){ e.preventDefault(); doUndo(); }
+    else if(k==='y' || (k==='z' && e.shiftKey)){ e.preventDefault(); doRedo(); }
+  }
 });
+document.getElementById('undoBtn').addEventListener('click', doUndo);
+document.getElementById('redoBtn').addEventListener('click', doRedo);
 
 function selectElement(el){
   if(selected) selected.selected=false;
@@ -1982,6 +2439,7 @@ function selectElement(el){
 }
 function deleteSelected(){
   if(!selected) return;
+  pushUndo();
   elements = elements.filter(e=>e!==selected);
   scopeProbes = scopeProbes.filter(p=>{
     if(p.elemId===selected.id){ delete scopeData[p.id]; return false; }
@@ -1996,14 +2454,21 @@ function deleteSelected(){
 const UNIT_LABEL = {resistor:'Ω',capacitor:'F',inductor:'H',potentiometer:'Ω',
   dcsource:'V',acsource:'V (amplitud)',currentsource:'A',npn:'hFE',pnp:'hFE',
   opamp:'ganancia A',nmos:'k (A/V²)',pmos:'k (A/V²)',zener:'V (Vz)',transformer:'n = Ns/Np',
-  scr:'A (I mantenimiento)',triac:'A (I mantenimiento)',relay:'Ω (bobina)'};
+  scr:'A (I mantenimiento)',triac:'A (I mantenimiento)',relay:'Ω (bobina)',fuse:'A (fusión)',
+  gate_and:'V (VCC lógica)',gate_or:'V (VCC lógica)',gate_nand:'V (VCC lógica)',
+  gate_nor:'V (VCC lógica)',gate_xor:'V (VCC lógica)',gate_xnor:'V (VCC lógica)',
+  gate_not:'V (VCC lógica)',speaker:'Ω (impedancia)'};
 const NAME_LABEL = {resistor:'Resistencia',capacitor:'Condensador',inductor:'Bobina',
   potentiometer:'Potenciómetro',dcsource:'Batería DC',acsource:'Fuente AC',
   currentsource:'Fuente de corriente',diode:'Diodo',led:'LED',switch:'Interruptor',
   wire:'Cable',ground:'Tierra',probe:'Sonda',npn:'Transistor NPN',pnp:'Transistor PNP',
   opamp:'Amplificador operacional',nmos:'MOSFET canal N',pmos:'MOSFET canal P',
   zener:'Diodo Zener',transformer:'Transformador ideal',schottky:'Diodo Schottky',
-  scr:'Tiristor (SCR)',triac:'Triac',relay:'Relé electromecánico'};
+  scr:'Tiristor (SCR)',triac:'Triac',relay:'Relé electromecánico',fuse:'Fusible',
+  ammeter:'Amperímetro',voltmeter:'Voltímetro',
+  gate_and:'Puerta AND',gate_or:'Puerta OR',gate_nand:'Puerta NAND',gate_nor:'Puerta NOR',
+  gate_xor:'Puerta XOR',gate_xnor:'Puerta XNOR',gate_not:'Puerta NOT (inversor)',
+  '555':'Temporizador 555',speaker:'Altavoz'};
 
 function renderProps(){
   const body = document.getElementById('propsBody');
@@ -2038,6 +2503,11 @@ function renderProps(){
       (el.closed? '<span style="color:var(--accent)">cerrado (activado)</span>':'abierto (reposo)')+
       (el._current!==undefined? '<br>I bobina ≈ '+niceUnit(el._current,'A'):'')+'</div>';
   }
+  if(el.type==='fuse'){
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">Estado: '+
+      (el.closed? '<span style="color:var(--accent)">intacto</span>':'<span style="color:var(--danger)">fundido</span> (clic en Seleccionar para reparar)')+
+      (el._current!==undefined? '<br>I ≈ '+niceUnit(el._current,'A'):'')+'</div>';
+  }
   if(el.type==='opamp'){
     html += '<label>Riel de alimentación ±V</label><input type="number" id="railInput" step="any" value="'+el.rail+'">';
   }
@@ -2059,6 +2529,19 @@ function renderProps(){
   if(el.type==='transformer' && el._current!==undefined){
     html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">I primario ≈ '+niceUnit(el._current,'A')+'</div>';
   }
+  if((['gate_and','gate_or','gate_nand','gate_nor','gate_xor','gate_xnor','gate_not'].includes(el.type)) && el._out!==undefined){
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">Salida: '+
+      '<span style="color:'+(el._out?'var(--accent)':'var(--dim)')+'">'+(el._out?'1 (alto)':'0 (bajo)')+'</span></div>';
+  }
+  if(el.type==='555' && el._out!==undefined){
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">OUT: '+
+      '<span style="color:'+(el._out?'var(--accent)':'var(--dim)')+'">'+(el._out?'alto':'bajo')+'</span>'+
+      '<br><span style="font-size:10.5px;">RESET debe conectarse a VCC para funcionar con normalidad.</span></div>';
+  }
+  if(el.type==='speaker'){
+    html += '<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;">'+
+      (audioCtx? '🔊 Audio activado (botón "Audio" de la cabecera)':'🔈 Activa el audio con el botón "Audio" de la cabecera para escucharlo')+'</div>';
+  }
   if(el.type==='probe'){
     const p = scopeProbes.find(p=>p.elemId===el.id);
     if(p) html += '<label>Etiqueta (nodo)</label><input type="text" id="probeLabelInput" value="'+p.label.replace(/"/g,'&quot;')+'">';
@@ -2067,22 +2550,25 @@ function renderProps(){
   body.innerHTML = html;
 
   const valInput = document.getElementById('valInput');
-  if(valInput) valInput.addEventListener('input', ()=>{ el.value = parseFloat(valInput.value)||0; });
+  if(valInput){ attachUndoableInput(valInput); valInput.addEventListener('input', ()=>{ el.value = parseFloat(valInput.value)||0; }); }
   const freqInput = document.getElementById('freqInput');
-  if(freqInput) freqInput.addEventListener('input', ()=>{ el.freq = parseFloat(freqInput.value)||0; });
+  if(freqInput){ attachUndoableInput(freqInput); freqInput.addEventListener('input', ()=>{ el.freq = parseFloat(freqInput.value)||0; }); }
   const wiperInput = document.getElementById('wiperInput');
-  if(wiperInput) wiperInput.addEventListener('input', ()=>{ el.wiper = wiperInput.value/100; });
+  if(wiperInput){ attachUndoableInput(wiperInput); wiperInput.addEventListener('input', ()=>{ el.wiper = wiperInput.value/100; }); }
   const vthInput = document.getElementById('vthInput');
-  if(vthInput) vthInput.addEventListener('input', ()=>{ el.vth = parseFloat(vthInput.value)||0.1; });
+  if(vthInput){ attachUndoableInput(vthInput); vthInput.addEventListener('input', ()=>{ el.vth = parseFloat(vthInput.value)||0.1; }); }
   const railInput = document.getElementById('railInput');
-  if(railInput) railInput.addEventListener('input', ()=>{ el.rail = Math.max(parseFloat(railInput.value)||0.1, 0.1); });
+  if(railInput){ attachUndoableInput(railInput); railInput.addEventListener('input', ()=>{ el.rail = Math.max(parseFloat(railInput.value)||0.1, 0.1); }); }
   const toggleSwitch = document.getElementById('toggleSwitch');
-  if(toggleSwitch) toggleSwitch.addEventListener('click', ()=>{ el.closed=!el.closed; renderProps(); });
+  if(toggleSwitch) toggleSwitch.addEventListener('click', ()=>{ pushUndo(); el.closed=!el.closed; renderProps(); });
   const probeLabelInput = document.getElementById('probeLabelInput');
-  if(probeLabelInput) probeLabelInput.addEventListener('input', ()=>{
-    const p = scopeProbes.find(p=>p.elemId===el.id);
-    if(p){ p.label = probeLabelInput.value || p.label; refreshProbeList(); }
-  });
+  if(probeLabelInput){
+    attachUndoableInput(probeLabelInput);
+    probeLabelInput.addEventListener('input', ()=>{
+      const p = scopeProbes.find(p=>p.elemId===el.id);
+      if(p){ p.label = probeLabelInput.value || p.label; refreshProbeList(); }
+    });
+  }
   document.getElementById('delBtn').addEventListener('click', deleteSelected);
 }
 
@@ -2094,11 +2580,12 @@ playBtn.addEventListener('click', ()=>{
 });
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   simTime=0;
-  for(const el of elements){ el.state={vprev:0,iprev:0,vd:0.1,vbe:0.6,vbc:-0.1,vgs:0,vds:0.1,vout:0}; }
+  for(const el of elements){ el.state={vprev:0,iprev:0,vd:0.1,vbe:0.6,vbc:-0.1,vgs:0,vds:0.1,vout:0,ff:false,vvcc:5,vgnd:0,logicIn1:0,logicIn2:0}; }
   for(const id in scopeData) scopeData[id]=[];
 });
 document.getElementById('clearBtn').addEventListener('click', ()=>{
   if(!confirm('¿Vaciar todo el circuito?')) return;
+  pushUndo();
   elements=[]; scopeProbes=[]; scopeData={}; selected=null;
   refreshProbeList(); renderProps(); simTime=0;
 });
@@ -2134,7 +2621,7 @@ document.getElementById('importFile').addEventListener('change', (e)=>{
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = ()=> importCircuitFromText(reader.result);
+  reader.onload = ()=> { pushUndo(); importCircuitFromText(reader.result); };
   reader.readAsText(file);
   e.target.value='';
 });
@@ -2196,6 +2683,7 @@ function renderLibraryList(filterText){
       if(!obj) return;
       const hasWork = elements.length>0;
       if(hasWork && !confirm('Esto reemplazará el circuito actual del lienzo. ¿Continuar?')) return;
+      pushUndo();
       importCircuitFromText(JSON.stringify(obj));
       document.getElementById('libraryOverlay').style.display='none';
     });
@@ -2256,6 +2744,87 @@ document.addEventListener('keydown', (e)=>{
   if(e.key==='Escape' && document.getElementById('libraryOverlay').style.display!=='none'){
     closeLibrary();
   }
+  if(e.key==='Escape' && document.getElementById('savedOverlay').style.display!=='none'){
+    closeSaved();
+  }
+});
+
+//////////////////////// MIS CIRCUITOS (localStorage) //////////////////////////
+// A diferencia de la Biblioteca (que necesita servir la carpeta ejemplos/ por
+// HTTP), esto guarda circuitos con nombre en el propio navegador — funciona
+// también abriendo el HTML directamente como archivo local.
+const SAVED_KEY = 'circuitlab_saved_circuits_v1';
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function loadSavedCircuits(){
+  try{ return JSON.parse(localStorage.getItem(SAVED_KEY)||'[]'); }catch(e){ return []; }
+}
+function writeSavedCircuits(list){
+  try{ localStorage.setItem(SAVED_KEY, JSON.stringify(list)); return true; }
+  catch(e){ alert('No se pudo guardar: '+e.message); return false; }
+}
+function renderSavedList(){
+  const body = document.getElementById('savedBody');
+  const list = loadSavedCircuits();
+  let html = '<div style="display:flex;gap:8px;margin-bottom:14px;">'+
+    '<input type="text" id="saveNameInput" placeholder="Nombre del circuito…" '+
+    'style="flex:1;background:#0f1319;border:1px solid var(--border);color:var(--text);'+
+    'padding:6px 10px;border-radius:6px;font-size:12.5px;">'+
+    '<button class="btn primary" id="saveNowBtn" style="padding:6px 12px;white-space:nowrap;">💾 Guardar actual</button></div>';
+  if(list.length===0){
+    html += '<div class="lib-empty-icon">🗄️</div><div style="color:var(--dim);text-align:center;">Aún no has guardado ningún circuito.</div>';
+  } else {
+    html += list.slice().reverse().map(c=>{
+      let count = 0;
+      try{ count = libraryComponentCount(JSON.parse(c.data)); }catch(e){}
+      const date = new Date(c.savedAt).toLocaleString();
+      return `<div class="lib-card">
+        <div class="lib-card-head"><div style="font-weight:600;">${escapeHtml(c.name)}</div></div>
+        <div style="color:var(--dim);font-size:11.5px;margin-bottom:9px;">${date} · ${count} componente${count===1?'':'s'}</div>
+        <button class="btn primary" data-load="${c.id}" style="padding:5px 12px;">▶ Cargar</button>
+        <button class="btn danger" data-del="${c.id}" style="padding:5px 12px;">🗑</button>
+      </div>`;
+    }).join('');
+  }
+  body.innerHTML = html;
+  document.getElementById('saveNowBtn').addEventListener('click', ()=>{
+    if(elements.length===0){ alert('El lienzo está vacío — no hay nada que guardar.'); return; }
+    const nameInput = document.getElementById('saveNameInput');
+    const name = nameInput.value.trim() || ('Circuito '+new Date().toLocaleDateString());
+    const list = loadSavedCircuits();
+    list.push({id:'c'+Date.now(), name, savedAt:Date.now(), data: serializeCircuit()});
+    if(writeSavedCircuits(list)) renderSavedList();
+  });
+  body.querySelectorAll('button[data-load]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const c = loadSavedCircuits().find(x=>x.id===btn.dataset.load);
+      if(!c) return;
+      if(elements.length>0 && !confirm('Esto reemplazará el circuito actual del lienzo. ¿Continuar?')) return;
+      pushUndo();
+      importCircuitFromText(c.data);
+      closeSaved();
+    });
+  });
+  body.querySelectorAll('button[data-del]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(!confirm('¿Eliminar este circuito guardado? No se puede deshacer.')) return;
+      writeSavedCircuits(loadSavedCircuits().filter(c=>c.id!==btn.dataset.del));
+      renderSavedList();
+    });
+  });
+}
+function closeSaved(){ document.getElementById('savedOverlay').style.display='none'; }
+document.getElementById('savedBtn').addEventListener('click', ()=>{
+  document.getElementById('savedOverlay').style.display='flex';
+  renderSavedList();
+});
+document.getElementById('savedCloseBtn').addEventListener('click', closeSaved);
+document.getElementById('savedOverlay').addEventListener('click', (e)=>{
+  if(e.target.id==='savedOverlay') closeSaved();
+});
+document.getElementById('audioBtn').addEventListener('click', ()=>{
+  if(audioCtx) disableAudio(); else enableAudio();
 });
 
 //////////////////////// CIRCUITO DE EJEMPLO INICIAL ///////////////////////////
@@ -2285,6 +2854,7 @@ function loadDemo(){
   refreshProbeList();
 }
 loadDemo();
+updateUndoRedoButtons();
 
 //////////////////////// ARRANQUE //////////////////////////////////////////////
 function initCanvasSize(){
